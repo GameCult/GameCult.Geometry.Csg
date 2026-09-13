@@ -567,8 +567,6 @@ pub struct DomainChunkBuild {
     pub manifest: SelectedCutManifest,
 }
 
-impl DomainChunkBuild {}
-
 #[derive(Clone, Debug)]
 pub struct TriangleChunk {
     pub key: DomainKey,
