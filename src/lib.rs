@@ -13,6 +13,7 @@ mod convex;
 mod cult_geometry;
 mod domain;
 mod dsl;
+mod field;
 mod frontier;
 mod mesh;
 mod primitives;
@@ -37,6 +38,7 @@ pub use domain::{
     ragnarok_column_fixture, ragnarok_column_spec, select_domain_cut,
 };
 pub use dsl::LevelDsl;
+pub use field::stream_distance;
 pub use frontier::{DemandFrontier, DemandPair, DirtyDemandFrontier};
 pub use mesh::TriangleMesh;
 pub use primitives::{
