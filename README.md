@@ -73,6 +73,20 @@ That bias is visible in `examples/industrial_maintenance_loop.rs`, where a
 curved habitat room is authored in tangent/radial/up space and then lowered into
 world-space oriented boxes and mesh bands.
 
+## Signed Distance
+
+`Assembler::distance(p)` (and `stream_distance` over any brush slice) lowers the
+same ordered brush stream to a scalar field instead of triangles: negative
+inside, positive outside. `Add` folds with `min`, `Subtract` with `max(d, -b)`,
+`Intersect` with `max`. It is the seam for isosurface meshing and GPU field
+refinement.
+
+Boxes, oriented boxes and Z cylinders are exact distances. Domes (a
+half-ellipsoid) and floret arms (max of face planes) are bounds that are exact
+on the surface and never overestimate. The field honours every operation on
+every primitive, including the non-box cutters the polygon kernel currently
+warns about and skips.
+
 ## Docs
 
 Research and implementation notes live in `docs/`:
