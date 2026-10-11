@@ -1,0 +1,275 @@
+Submodule ext/nanogui contains modified content
+Submodule ext/glfw contains modified content
+diff --git a/ext/nanogui/ext/glfw/CMakeLists.txt b/ext/nanogui/ext/glfw/CMakeLists.txt
+index 8b861820..be54a918 100644
+--- a/ext/nanogui/ext/glfw/CMakeLists.txt
++++ b/ext/nanogui/ext/glfw/CMakeLists.txt
+@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 2.8.11.2)
+ if (NOT CMAKE_VERSION VERSION_LESS "3.0")
+     # Until all major package systems have moved to CMake 3,
+     # we stick with the older INSTALL_NAME_DIR mechanism
+-    cmake_policy(SET CMP0042 OLD)
++    cmake_policy(SET CMP0042 NEW)
+ endif()
+ 
+ if(POLICY CMP0022)
+diff --git a/src/batch.cpp b/src/batch.cpp
+index b35769d..d5d8e36 100644
+--- a/src/batch.cpp
++++ b/src/batch.cpp
+@@ -21,12 +21,79 @@
+ #include "normal.h"
+ #include "extract.h"
+ #include "bvh.h"
++#include <fstream>
++#include <unordered_map>
++
++/* Fork: external constraint field. Text file: a count n, then n records
++     x y z   qx qy qz qw   ox oy oz ow   s
++   (q: tangent direction + weight in [0,1] blended into the orientation solve;
++    o: a point the lattice line along q must pass through + weight, as Instant Meshes' boundary
++    constraints use it; s: target edge length at the point, <= 0 for the global scale).
++   Each solver vertex takes the nearest record (uniform-grid lookup), so the records need not
++   match the vertex indexing after subdivision. */
++static void apply_field_file(MultiResolutionHierarchy &mRes, const std::string &path, int rosy, int posy) {
++    std::ifstream is(path);
++    if (!is) throw std::runtime_error("Could not open field file " + path);
++    size_t n; is >> n;
++    std::vector<Float> R(n * 12);
++    for (size_t k = 0; k < n * 12; ++k) is >> R[k];
++    if (!is) throw std::runtime_error("Field file is truncated: " + path);
++    Vector3f lo = Vector3f::Constant(1e30f), hi = Vector3f::Constant(-1e30f);
++    for (size_t r = 0; r < n; ++r) for (int k = 0; k < 3; ++k) { lo[k] = std::min(lo[k], R[r*12+k]); hi[k] = std::max(hi[k], R[r*12+k]); }
++    Float cell = std::max((hi - lo).maxCoeff() / std::cbrt((Float) n) * 1.5f, (Float) 1e-6f);
++    auto key = [&](const Vector3f &p, int dx, int dy, int dz) {
++        int64_t x = (int64_t) std::floor((p.x() - lo.x()) / cell) + dx, y = (int64_t) std::floor((p.y() - lo.y()) / cell) + dy,
++                z = (int64_t) std::floor((p.z() - lo.z()) / cell) + dz;
++        return (x * 73856093) ^ (y * 19349663) ^ (z * 83492791);
++    };
++    std::unordered_multimap<int64_t, uint32_t> grid;
++    for (size_t r = 0; r < n; ++r) grid.emplace(key(Vector3f(R[r*12], R[r*12+1], R[r*12+2]), 0, 0, 0), (uint32_t) r);
++    mRes.clearConstraints();
++    const MatrixXf &V = mRes.V(), &N = mRes.N();
++    VectorXf S0(V.cols()); bool anyS = false;
++    uint32_t nq = 0, no = 0;
++    for (uint32_t i = 0; i < V.cols(); ++i) {
++        Vector3f p = V.col(i); Float best = 1e30f; int64_t br = -1;
++        for (int ring = 1; ring <= 3 && br < 0; ++ring)
++            for (int dx = -ring; dx <= ring; ++dx) for (int dy = -ring; dy <= ring; ++dy) for (int dz = -ring; dz <= ring; ++dz) {
++                auto range = grid.equal_range(key(p, dx, dy, dz));
++                for (auto it = range.first; it != range.second; ++it) {
++                    const Float *q = &R[it->second * 12];
++                    Float d = (Vector3f(q[0], q[1], q[2]) - p).squaredNorm();
++                    if (d < best) { best = d; br = it->second; }
++                }
++            }
++        if (br < 0) { S0[i] = mRes.scale(); continue; }
++        const Float *q = &R[br * 12];
++        Vector3f n_i = N.col(i), cq(q[3], q[4], q[5]);
++        cq -= n_i * n_i.dot(cq);
++        if (q[6] > 0 && cq.squaredNorm() > 1e-12f) {
++            mRes.CQ().col(i) = cq.normalized(); mRes.CQw()[i] = std::min(q[6], (Float) 1); ++nq;
++            if (q[10] > 0) { mRes.CO().col(i) = Vector3f(q[7], q[8], q[9]); mRes.COw()[i] = std::min(q[10], (Float) 1); ++no; }
++        }
++        S0[i] = q[11] > 0 ? q[11] : mRes.scale(); anyS |= q[11] > 0;
++    }
++    mRes.propagateConstraints(rosy, posy);
++    cout << "Field file: " << n << " records, " << nq << " orientation and " << no << " position constraints";
++    if (anyS) {
++        std::vector<VectorXf> &S = mRes.Slevels(); S.clear(); S.push_back(S0);
++        for (int l = 0; l + 1 < mRes.levels(); ++l) {
++            const MatrixXu &up = mRes.toUpper(l); VectorXf next(up.cols());
++            for (uint32_t i = 0; i < up.cols(); ++i)
++                next[i] = up(1, i) == INVALID ? S[l][up(0, i)] : 0.5f * (S[l][up(0, i)] + S[l][up(1, i)]);
++            S.push_back(next);
++        }
++        cout << ", per-vertex scale " << S0.minCoeff() << " .. " << S0.maxCoeff();
++    }
++    cout << endl;
++}
+ 
+ void batch_process(const std::string &input, const std::string &output,
+                    int rosy, int posy, Float scale, int face_count,
+                    int vertex_count, Float creaseAngle, bool extrinsic,
+                    bool align_to_boundaries, int smooth_iter, int knn_points,
+-                   bool pure_quad, bool deterministic) {
++                   bool pure_quad, bool deterministic,
++                   const std::string &field_file) {
+     cout << endl;
+     cout << "Running in batch mode:" << endl;
+     cout << "   Input file             = " << input << endl;
+@@ -157,6 +224,9 @@ void batch_process(const std::string &input, const std::string &output,
+         mRes.propagateConstraints(rosy, posy);
+     }
+ 
++    if (!field_file.empty() && !pointcloud)
++        apply_field_file(mRes, field_file, rosy, posy);
++
+     if (bvh) {
+         bvh->setData(&mRes.F(), &mRes.V(), &mRes.N());
+     } else if (smooth_iter > 0) {
+diff --git a/src/batch.h b/src/batch.h
+index e9d7baa..298ea5c 100644
+--- a/src/batch.h
++++ b/src/batch.h
+@@ -19,4 +19,5 @@ extern void batch_process(const std::string &input, const std::string &output,
+                           int rosy, int posy, Float scale, int face_count,
+                           int vertex_count, Float creaseAngle, bool extrinsic,
+                           bool align_to_boundaries, int smooth_iter,
+-                          int knn_points, bool dominant, bool deterministic);
++                          int knn_points, bool dominant, bool deterministic,
++                          const std::string &field_file = "");
+diff --git a/src/extract.cpp b/src/extract.cpp
+index 5a38653..34ea42f 100644
+--- a/src/extract.cpp
++++ b/src/extract.cpp
+@@ -44,6 +44,8 @@ extract_graph(const MultiResolutionHierarchy &mRes, bool extrinsic, int rosy, in
+ 
+     const MatrixXf &Q = mRes.Q(), &O = mRes.O(), &N = mRes.N(), &V = mRes.V();
+     const VectorXf &COw = mRes.COw();
++    const VectorXf &S = mRes.S();
++    const bool varS = S.size() == V.cols();
+     const AdjacencyMatrix &adj = mRes.adj();
+ 
+     Timer<> timer;
+@@ -75,7 +77,8 @@ extract_graph(const MultiResolutionHierarchy &mRes, bool extrinsic, int rosy, in
+                     std::pair<Vector2i, Vector2i> shift = compat_position(
+                             V.col(i), N.col(i), Q_rot.first, O.col(i),
+                             V.col(j), N.col(j), Q_rot.second, O.col(j),
+-                            scale, inv_scale, &error);
++                            varS ? 0.5f * (S[i] + S[j]) : scale,
++                            varS ? 2.0f / (S[i] + S[j]) : inv_scale, &error);
+ 
+                     Vector2i absDiff = (shift.first-shift.second).cwiseAbs();
+ 
+@@ -280,7 +283,8 @@ extract_graph(const MultiResolutionHierarchy &mRes, bool extrinsic, int rosy, in
+                         continue;
+                     uint32_t j = it->second;
+ 
+-                    Float weight = std::exp(-(O.col(i)-V.col(i)).squaredNorm() * inv_scale * inv_scale * 9);
++                    const Float is_i = varS ? 1.0f / S[i] : inv_scale;
++                    Float weight = std::exp(-(O.col(i)-V.col(i)).squaredNorm() * is_i * is_i * 9);
+                     if (COw.size() != 0 && COw[i] != 0) {
+                         tbb::spin_mutex::scoped_lock lock(mutex);
+                         crease_out.insert(j);
+@@ -325,7 +329,7 @@ extract_graph(const MultiResolutionHierarchy &mRes, bool extrinsic, int rosy, in
+             bool changed_inner;
+             do {
+                 changed_inner = false;
+-                Float thresh = 0.3f * scale;
++                Float thresh = 0.3f * (varS ? S.minCoeff() : scale); /* fork: smallest local spacing */
+ 
+                 std::vector<std::tuple<Float, uint32_t, uint32_t, uint32_t>> candidates;
+                 for (uint32_t i_id=0; i_id<adj_new.size(); ++i_id) {
+diff --git a/src/field.cpp b/src/field.cpp
+index 4d986aa..e07ce29 100644
+--- a/src/field.cpp
++++ b/src/field.cpp
+@@ -901,6 +901,8 @@ template <typename CompatFunctor, typename RoundFunctor> static inline Float opt
+     const AdjacencyMatrix &adj = mRes.adj(level);
+     const MatrixXf &N = mRes.N(level), &Q = mRes.Q(level), &V = mRes.V(level);
+     const Float scale = mRes.scale(), inv_scale = 1.0f / scale;
++    const VectorXf &S = mRes.S(level);
++    const bool varS = S.size() == V.cols();
+     const std::vector<uint32_t> *phase = nullptr;
+     const MatrixXf &CQ = mRes.CQ(level);
+     const MatrixXf &CO = mRes.CO(level);
+@@ -933,8 +935,9 @@ template <typename CompatFunctor, typename RoundFunctor> static inline Float opt
+                     q_j.normalize();
+                 #endif
+ 
++                const Float s_ij = varS ? 0.5f * (S[i] + S[j]) : scale;
+                 std::pair<Vector3f, Vector3f> value = compat_functor(
+-                    v_i, n_i, q_i, sum, v_j, n_j, q_j, o_j, scale, inv_scale);
++                    v_i, n_i, q_i, sum, v_j, n_j, q_j, o_j, s_ij, 1.0f / s_ij);
+ 
+                 sum = value.first*weight_sum + value.second*weight;
+                 weight_sum += weight;
+@@ -955,7 +958,8 @@ template <typename CompatFunctor, typename RoundFunctor> static inline Float opt
+             }
+ 
+             if (weight_sum > 0)
+-                O.col(i) = round_functor(sum, q_i, n_i, v_i, scale, inv_scale);
++                O.col(i) = varS ? round_functor(sum, q_i, n_i, v_i, S[i], 1.0f / S[i])
++                                : round_functor(sum, q_i, n_i, v_i, scale, inv_scale);
+         }
+     };
+ 
+diff --git a/src/hierarchy.cpp b/src/hierarchy.cpp
+index 2882a67..7bca4ea 100644
+--- a/src/hierarchy.cpp
++++ b/src/hierarchy.cpp
+@@ -813,7 +813,7 @@ void MultiResolutionHierarchy::propagateConstraints(int rosy, int posy) {
+                     }
+                     if (co != Vector3f::Zero()) {
+                         Vector3f n = N_next.col(i), v = V_next.col(i);
+-                        co -= n.dot(cq - v) * n;
++                        co -= n.dot(co - v) * n; /* fork: upstream projected cq - v */
+                     }
+                     #if 0
+                         cqw *= 0.5f;
+diff --git a/src/hierarchy.h b/src/hierarchy.h
+index 2b3c337..ee36928 100644
+--- a/src/hierarchy.h
++++ b/src/hierarchy.h
+@@ -76,6 +76,9 @@ public:
+     inline uint32_t size(int level = 0) const { return mV[level].cols(); }
+ 
+     inline Float scale() const { return mScale; }
++    /* Fork: optional per-vertex target edge length (one vector per level; empty = global scale) */
++    inline const VectorXf &S(int level = 0) const { static const VectorXf empty; return level < (int) mS.size() ? mS[level] : empty; }
++    inline std::vector<VectorXf> &Slevels() { return mS; }
+     inline void setScale(Float scale) { mScale = scale; }
+     inline int iterationsQ() const { return mIterationsQ; }
+     inline void setIterationsQ(int iterationsQ) { mIterationsQ = iterationsQ; }
+@@ -125,6 +128,7 @@ public:
+     bool mFrozenQ, mFrozenO;
+     ordered_lock mMutex;
+     Float mScale;
++    std::vector<VectorXf> mS;
+     int mIterationsQ;
+     int mIterationsO;
+     uint32_t mTotalSize;
+diff --git a/src/main.cpp b/src/main.cpp
+index a2f6f11..439b11f 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
+     int rosy = 4, posy = 4, face_count = -1, vertex_count = -1;
+     uint32_t knn_points = 10, smooth_iter = 2;
+     Float crease_angle = -1, scale = -1;
+-    std::string batchOutput;
++    std::string batchOutput, fieldFile;
+     #if defined(__APPLE__)
+         bool launched_from_finder = false;
+     #endif
+@@ -44,6 +44,12 @@ int main(int argc, char **argv) {
+                 deterministic = true;
+             } else if (strcmp("--intrinsic", argv[i]) == 0 || strcmp("-i", argv[i]) == 0) {
+                 extrinsic = false;
++            } else if (strcmp("--field", argv[i]) == 0) {
++                if (++i >= argc) {
++                    cerr << "Missing field file argument!" << endl;
++                    return -1;
++                }
++                fieldFile = argv[i];
+             } else if (strcmp("--boundaries", argv[i]) == 0 || strcmp("-b", argv[i]) == 0) {
+                 align_to_boundaries = true;
+             } else if (strcmp("--threads", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
+@@ -154,6 +160,7 @@ int main(int argc, char **argv) {
+         cout << "   -S, --smooth <iter>       Number of smoothing & ray tracing reprojection steps (default: 2)" << endl;
+         cout << "   -D, --dominant            Generate a tri/quad dominant mesh instead of a pure tri/quad mesh" << endl;
+         cout << "   -i, --intrinsic           Intrinsic mode (extrinsic is the default)" << endl;
++        cout << "   --field <file>            Per-point constraints: x y z  qx qy qz qw  ox oy oz ow  s (see batch.cpp)" << endl;
+         cout << "   -b, --boundaries          Align to boundaries (only applies when the mesh is not closed)" << endl;
+         cout << "   -r, --rosy <number>       Specifies the orientation symmetry type (2, 4, or 6)" << endl;
+         cout << "   -p, --posy <number>       Specifies the position symmetry type (4 or 6)" << endl;
+@@ -177,7 +184,7 @@ int main(int argc, char **argv) {
+             batch_process(args[0], batchOutput, rosy, posy, scale, face_count,
+                           vertex_count, crease_angle, extrinsic,
+                           align_to_boundaries, smooth_iter, knn_points,
+-                          !dominant, deterministic);
++                          !dominant, deterministic, fieldFile);
+             return 0;
+         } catch (const std::exception &e) {
+             cerr << "Caught runtime error : " << e.what() << endl;
