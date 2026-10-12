@@ -1,0 +1,217 @@
+[
+ {
+  "name": "port_flank_s16",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/port_flank_s16.obj",
+  "p": [
+   0.17,
+   0.0,
+   0.10491874328928341
+  ],
+  "n": [
+   0.16691628816232543,
+   0.21537074072406956,
+   0.962161315365608
+  ],
+  "r": 0.015,
+  "seg": 16,
+  "thick": 0.10439623157800804,
+  "depth": 0.02,
+  "note": "flank gun port"
+ },
+ {
+  "name": "port_flank_s48",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/port_flank_s48.obj",
+  "p": [
+   0.17,
+   0.0,
+   0.10491874328928341
+  ],
+  "n": [
+   0.16691628816232543,
+   0.21537074072406956,
+   0.962161315365608
+  ],
+  "r": 0.015,
+  "seg": 48,
+  "thick": 0.10439623157800804,
+  "depth": 0.02,
+  "note": "flank gun port"
+ },
+ {
+  "name": "split_fwd_sub",
+  "kind": "box",
+  "op": "sub",
+  "cutter": "cutters/split_fwd.obj",
+  "lo": [
+   -0.8,
+   0.22,
+   -0.6
+  ],
+  "hi": [
+   0.8,
+   0.8,
+   0.6
+  ],
+  "note": "transverse split, forward body (crosses the rim crease twice)"
+ },
+ {
+  "name": "split_fwd_int",
+  "kind": "box",
+  "op": "int",
+  "cutter": "cutters/split_fwd.obj",
+  "lo": [
+   -0.8,
+   0.22,
+   -0.6
+  ],
+  "hi": [
+   0.8,
+   0.8,
+   0.6
+  ],
+  "note": "transverse split, forward body (crosses the rim crease twice)"
+ },
+ {
+  "name": "probe_equalk_s16",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_equalk_s16.obj",
+  "p": [
+   -0.0051448,
+   0.4898214,
+   -0.1458136999999997
+  ],
+  "n": [
+   -0.3623529208037491,
+   0.7424111177624207,
+   0.5634945368038141
+  ],
+  "r": 0.01992831921910964,
+  "seg": 16,
+  "thick": 0.0369133824014618,
+  "depth": 0.02,
+  "note": "vertex 1799, r=1/|k|max=0.0199, |k|=50.18"
+ },
+ {
+  "name": "probe_equalk_s48",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_equalk_s48.obj",
+  "p": [
+   -0.0051448,
+   0.4898214,
+   -0.1458136999999997
+  ],
+  "n": [
+   -0.3623529208037491,
+   0.7424111177624207,
+   0.5634945368038141
+  ],
+  "r": 0.01992831921910964,
+  "seg": 48,
+  "thick": 0.0369133824014618,
+  "depth": 0.02,
+  "note": "vertex 1799, r=1/|k|max=0.0199, |k|=50.18"
+ },
+ {
+  "name": "probe_saddle_s16",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_saddle_s16.obj",
+  "p": [
+   0.2801811,
+   -0.1680136,
+   0.1273491000000001
+  ],
+  "n": [
+   0.005070735374261266,
+   -0.9190006203256085,
+   0.39422347403967595
+  ],
+  "r": 0.015,
+  "seg": 16,
+  "thick": 0.014325938653540371,
+  "depth": 0.008595563192124222,
+  "note": "saddle vertex 538 k1=-7.00 k2=55.16"
+ },
+ {
+  "name": "probe_saddle_s48",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_saddle_s48.obj",
+  "p": [
+   0.2801811,
+   -0.1680136,
+   0.1273491000000001
+  ],
+  "n": [
+   0.005070735374261266,
+   -0.9190006203256085,
+   0.39422347403967595
+  ],
+  "r": 0.015,
+  "seg": 48,
+  "thick": 0.014325938653540371,
+  "depth": 0.008595563192124222,
+  "note": "saddle vertex 538 k1=-7.00 k2=55.16"
+ },
+ {
+  "name": "probe_crease_sub",
+  "kind": "box",
+  "op": "sub",
+  "cutter": "cutters/probe_crease.obj",
+  "lo": [
+   0.33,
+   -0.8,
+   -0.6
+  ],
+  "hi": [
+   0.9,
+   0.8,
+   0.6
+  ],
+  "note": "chordwise split x>0.33 crosses the rim crease"
+ },
+ {
+  "name": "probe_crease_int",
+  "kind": "box",
+  "op": "int",
+  "cutter": "cutters/probe_crease.obj",
+  "lo": [
+   0.33,
+   -0.8,
+   -0.6
+  ],
+  "hi": [
+   0.9,
+   0.8,
+   0.6
+  ],
+  "note": "chordwise split x>0.33 crosses the rim crease"
+ },
+ {
+  "name": "probe_switch_s48",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_switch_s48.obj",
+  "p": [
+   0.0,
+   -0.05,
+   0.1680719189037999
+  ],
+  "n": [
+   -0.09574350308538446,
+   0.11061947876461269,
+   0.9892403714642788
+  ],
+  "r": 0.08,
+  "seg": 48,
+  "thick": 0.2200342785460706,
+  "depth": 0.02,
+  "note": "r=0.08 across the dorsal ridge"
+ }
+]

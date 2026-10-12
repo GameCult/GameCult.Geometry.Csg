@@ -1,0 +1,19 @@
+[package]
+name = "spike-boolean-weld"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Scratch spike crate (brush-tree spike-boolean-weld). Not a workspace member of the main crate.
+[workspace]
+
+[features]
+default = []
+manifold = ["dep:manifold-csg"]
+
+[dependencies]
+manifold-csg = { version = "=0.4.1", optional = true }
+boolmesh = "=0.2.1"
+
+[profile.release]
+debug = false
