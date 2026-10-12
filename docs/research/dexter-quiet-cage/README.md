@@ -13,7 +13,14 @@ Exported from a copy by `export.py` (Blender, background mode). Files:
 
 Fidelity of the hand cage to the scan (vertex-to-nearest-vertex, an upper bound on surface distance; hull diagonal 1.492):
 cage->scan mean 0.88% p95 2.04% max 3.11% of the diagonal; scan->cage mean 1.29% p95 4.12% max 6.03%.
-That spread is the artistic liberty a human cage takes, and is the fidelity band an automated remesh is measured against.
+That spread mixes two things and is NOT yet a fidelity bar: the cage captures the primary form only (silhouette and main
+curves); the canopy, vents, intakes and nose details of the scan are absent by design and belong to a detail layer above
+the cage. A bar must be measured on primary form (smoothed scan, masked detail, or silhouettes), not raw vertices.
+
+Operator, 2026-10-12, with the screenshots here (cage-limit-*.png beside scan-*.png): "Note that I'm specifically trying
+to be faithful here to the curves of the original, and my control points can go to unexpected places to achieve that.
+The cage controls the surface, the cage is not the surface." Producing such a cage is subdivision-surface fitting
+(control points off the surface, solved so the limit surface fits), not remeshing.
 
 Operator, 2026-10-12: "I'm afraid I had to take a bit of artistic liberty to get the cage to behave, mostly because
 of how creases work in Blender (generates horrible geometry if the crease path isn't closed)". Body fact for the
