@@ -47,18 +47,36 @@ Microbevels from the field are gone: the bar names one-segment mesh bevels.
 scoped booleans, and smooth unions with a named radius. Every part (top-level branch) declares its
 representation, `field` or `kernel`. The declaration is authored, never inferred from the shape.
 
-**A `field` part** (continuous body, Dexter Quiet):
+**A `field` part** (continuous body, Dexter Quiet) has two layers. The operator, 2026-10-12, on her
+cage: "Note that I'm specifically trying to be faithful here to the curves of the original, and my
+control points can go to unexpected places to achieve that. The cage controls the surface, the cage
+is not the surface." Her cage carries the primary form (silhouette and main curves); the canopy,
+vents, intakes and nose details are absent by design.
 
-1. Field: the part's signed-distance program, every primitive and blend defined once in Geometry.Csg.
-   Hard edges the author wants crisp are declared as creases (a hard `max`, run 4's wing rim), not
-   detected afterwards.
-2. Cage: a coarse quad-dominant control cage whose crease edges lie on the declared creases and form
-   closed loops, refit so its Catmull-Clark limit surface lies on the field's zero set (run 4's refit,
-   run 3's least-squares in a mirror-reduced space).
-3. Evaluated mesh: the operator's own stack, Mirror, Subdivision (limit surface), Bevel (one segment,
-   on the creases), Weighted Normal (`dexter-quiet-cage/README.md`). Seams lie on the closed crease
-   loops and part boundaries; run 7 showed seams through a broken crease join wing top and bottom.
-4. Output: the cage with its stack, as an object in the ship's `.blend`; Package applies and exports it.
+- **Primary-form layer.** Owner: the part's field, in the tree.
+  1. Field: a signed-distance composition of the large forms (body, wing, pods, fused sweeps), every
+     primitive and blend defined once in Geometry.Csg. Hard edges meant to be crisp are declared as
+     creases (a hard `max`, run 4's wing rim), not detected afterwards.
+  2. Cage, derived: a coarse quad-dominant control cage whose crease edges form closed loops on the
+     declared creases, with its control points *fitted* so the Catmull-Clark limit surface lies on the
+     field's zero set. The control points sit off the surface; producing the cage is subdivision-surface
+     fitting (Hoppe et al. 1994; Marinov and Kobbelt 2005), not remeshing the surface.
+  3. Evaluated mesh: the operator's own stack, Mirror, Subdivision (limit surface), Bevel (one segment,
+     on the creases), Weighted Normal (`dexter-quiet-cage/README.md`). Seams lie on the closed crease
+     loops and part boundaries; run 7 showed seams through a broken crease join wing top and bottom.
+- **Detail layer.** Owner: the part's detail brushes, in the tree. Canopy, vents, intakes and nose
+  details are brushes placed on the evaluated limit surface. They never move the cage, and the cage
+  never encodes them. How a detail brush lowers onto a curved subdivision surface is not known yet
+  (below).
+- **Output:** the cage with its stack and the lowered detail, as objects in the ship's `.blend`;
+  Package applies and exports them.
+
+**What the probes tested.** Position fitting was tested: run 3 fitted a designed cage's control points
+to the scan by least squares on the limit operator (v7, chamfer 0.228 %), run 4 refit a cage to the
+field, run 6 refit Instant Meshes cages of 144-342 faces (best 0.527 % lowered, 103 poles per 1000
+vertices). Runs 5-7 otherwise remeshed the surface, which cannot yield a cage of this kind. What no run
+tested is generating cage *connectivity* automatically: run 3's topology was designed by hand, and run
+6's came from a remesher at cage density, which was blocky and pole-heavy.
 
 **A `kernel` part** (mechanical, the squatter mech ship): the polygon kernel builds exact planar faces
 with scoped booleans, a one-segment bevel on hard edges, face-weighted normals, and UVs from each
@@ -73,14 +91,15 @@ exported by the existing Package. Nothing reads a cage, mesh or render back as t
 |---|---|---|---|
 | Tree (Geometry.Csg) | text through the one commit primitive | typed tree revision | in-memory store |
 | Field | tree part | distance and gradient at a point | trait; analytic test shapes |
-| Cage generator | field, declared creases, target face budget | cage with crease flags | trait; the hand cage is a fixed implementation |
-| Refit | cage, field, subdivision rule | moved cage vertices | linear limit operator, injectable |
+| Cage connectivity generator | field, declared creases, target face budget | cage connectivity with crease flags | trait; the hand cage is a fixed implementation |
+| Cage fitter | cage connectivity, field, subdivision rule | fitted control points | linear limit operator, injectable |
+| Detail lowering | detail brushes, evaluated limit mesh | detail geometry | trait |
 | Kernel | tree part | mesh with per-face brush and surface ids | trait |
 | Scorer | two meshes | the bar's numbers | pure mesh math, no Blender |
 | Brokkr bridge | intents from `brokkr-ctl` | receipts, objects in the ship file | directory store or loopback, per `blender-transport` |
 
-The cage generator is the owner nobody has built: runs 5-7 produced dense field-aligned meshes, never
-a cage. It sits behind a port so that candidates can be swapped and scored against the bar below.
+The connectivity generator is the owner nobody has built: runs 5-7 produced dense field-aligned
+meshes, and run 6's cage-density remesh was blocky. It sits behind a port so that candidates can be swapped and scored against the bar below.
 
 ## The hand cage as the measuring stick
 
@@ -97,17 +116,24 @@ a cage. It sits behind a port so that candidates can be swapped and scored again
 - Fidelity to the scan, vertex to nearest vertex, % of the hull diagonal (1.492):
   cage to scan mean 0.88, p95 2.04, max 3.11; scan to cage mean 1.29, p95 4.12, max 6.03.
 
-**Why the scan stays the shape reference.** The operator's words: "I'm afraid I had to take a bit of
-artistic liberty to get the cage to behave, mostly because of how creases work in Blender (generates
-horrible geometry if the crease path isn't closed)". The liberty was a concession to the tool, so the
-cage's departures are a tolerance band, not a new shape. Whether her cage should instead become the
-shape reference is question `fidelity-reference`.
+**Why the scan stays the shape reference.** She was "specifically trying to be faithful here to the
+curves of the original"; the liberty she took was a concession to Blender's creases ("I'm afraid I had
+to take a bit of artistic liberty to get the cage to behave, mostly because of how creases work in
+Blender (generates horrible geometry if the crease path isn't closed)"). So the scan's primary form is
+the shape, and the cage's departures from it are a tolerance band.
 
-**The fidelity bar.** The evaluated output of a `field` part, measured the way the cage was (vertex to
-nearest vertex against the same scan, both directions, at a vertex count within half to double the
-cage's 3,154), is no worse than the hand cage in any of the six numbers above. Before the first cut
-uses the shared scorer (chamfer, F@2 %, silhouette IoU, run 4's `tools/common.py`), the hand cage's
-score under it is recorded as a body fact, and the bar is then also "no worse than the cage there".
+**The six numbers above are not the bar yet.** They mix two things: her liberty, and the detail the
+cage omits by design (scan to cage max 6.03 % is most likely the canopy or a vent, not the curves). A
+fidelity bar must measure primary form only. How primary form is separated from detail is question
+`primary-form-measure`; the recommendation is a detail mask the operator paints once on the scan.
+
+**The fidelity bar.** The primary-form layer's evaluated output, measured against the scan with detail
+excluded by that rule, vertex to nearest vertex in both directions at a vertex count within half to
+double the cage's 3,154, is no worse than the hand cage measured the same way, in mean, p95 and max;
+and its silhouette IoU from the three axes is no lower than the hand cage's. The hand cage's numbers
+under the rule, and its score under the shared scorer (chamfer, F@2 %, silhouette IoU, run 4's
+`tools/common.py`), are recorded as body facts before the first cut is measured. Until then the six
+numbers above are a loose upper bound only.
 
 **Attribution.** Every measurement reports two parts separately: the program's zero set against the
 scan, and the cage's limit surface against the field. Run 7 misdiagnosed the wall for a whole spike
@@ -124,10 +150,15 @@ because only the end-to-end number existed.
 
 ## Not yet known (research owed before cuts are mapped)
 
-- **How the cage is generated.** Candidates in the research: a quad layout from the cross field
-  (patent US 12086939; Kloiber and Augsdorfer 2020), a coarse remesh then refit (run 6 at 144-342 faces:
-  115-170 poles per 1000 vertices), a template cage refit (run 7 "Next" item 4). No measured source
-  covers coarse feature-aligned patch layouts.
+- **How the cage's connectivity is generated for fitting.** Position fitting is covered and tested.
+  Connectivity is not: Hoppe et al. 1994 optimise the control mesh's connectivity as one phase, and
+  Marinov and Kobbelt's Solid Modeling 2004 version restructures the control mesh adaptively, but the
+  research file has neither full text read (subd-cages file s.1, Gaps). Other candidates: a quad layout
+  from the cross field (patent US 12086939; Kloiber and Augsdorfer 2020), QEM simplification to a base
+  mesh, a coarse remesh then refit (run 6), a template cage refit (run 7 "Next" item 4).
+- **How a detail brush lowers onto the limit surface** (a boolean into the evaluated mesh, an inset in
+  the cage, or a separate interpenetrating piece). The research found booleans on curved surfaces give
+  stretched faces and no convention for subd body plus primitive inserts (subd-cages file s.0, s.5).
 - **What text authors a `field` part.** OpenSCAD has no smooth union, so `openscad-target` and
   `text-is-a-surface` from r1 cannot both hold for smooth-min parts.
 - **How a `field` part and a `kernel` part meet** on one hull. The research found no convention
