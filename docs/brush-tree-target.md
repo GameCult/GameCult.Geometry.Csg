@@ -1,179 +1,229 @@
-# Brush tree: target (r2)
+# Brush tree: target (r3)
 
 Campaign `brush-tree`, owned by the Aetheria/Ghostlight Self. Drafted by Imagination
-(`imagination-brush-tree-target-r2`, session `self-2026-10-11-ag2`) on 2026-10-12.
-It supersedes r1 (`49948c8b`, the CSG-only target). This page holds the ends, not the means:
-no cut plan. The typed `brush-tree:target:r2` holds the invariants, the not-in-scope list and the
-canonical implementations; this page holds why, and the numbers behind the bars.
+(`imagination-brush-tree-target-r3`, session `self-2026-10-11-ag2`) on 2026-10-12.
+It supersedes r2 (`a7879dad`). This page holds the ends, not the means: no cut plan. The typed
+`brush-tree:target:r3` holds the invariants, the not-in-scope list and the canonical implementations;
+this page holds why, the authority map, and what is still unknown.
 
-- **Repos:** `GameCult/GameCult.Geometry.Csg` (the tree, the field, the kernel, the scorer),
-  `GameCult/Brokkr` (the agent's hands in Blender), `GameCult/Aetheria` (the first consumer).
+- **Repos:** `GameCult/GameCult.Geometry.Csg` (the tree, the cage evaluator, the kernel, booleans and the
+  weld, the scorer), `GameCult/Brokkr` (the agent's hands in Blender), `GameCult/Aetheria` (the first
+  consumer).
 - **Working branch:** `eureka/brush-tree`.
 
 ## The rulings this target rests on
 
 Read them in the mind by id; their operator quotes are the authority, not this page.
 
-- `brush-tree:ruling:representation-per-hull`: subdivision limit surfaces for continuous bodies like
-  Dexter Quiet, primitives for mechanical hulls like the squatter mech ship; both paths, per hull or
-  per part. It narrows the "mesh CSG is the main representation" clause of
-  `settled-direction-2026-10-10` to mechanical hulls.
-- `brush-tree:ruling:pursue-sdf-composition-remeshing`: the continuous path is an SDF composition
-  remeshed automatically; viability rests on the remesher; the operator's own Dexter Quiet rebuild is
-  the reference it is measured against.
-- `brush-tree:ruling:shippable-part-bar`: clean unbroken flow, part-coherent low-distortion UVs,
-  one-segment bevels with face-weighted normals.
-- `brush-tree:ruling:no-unownable-tools-in-loop`: only code we can own is in the loop.
-- `brush-tree:ruling:spike-sdf-smin-to-cage`, `:spike-instant-meshes-field-features`: the spikes
-  whose results (runs 4 and 7) this target reads.
-- Unchanged from r1 and still in force: `openscad-target`, `brokkr-beats-blender-mcp`, `cli-not-mcp`,
-  and the defaulted rulings on the Blender sink, `run`, docs lookup, look files, the per-ship tree
-  `.cc`, persistence through cultcache-rs, the Package path, Studio and impostors.
+- `brush-tree:ruling:hand-cages-enter-the-tree` (Operator, 2026-10-12): a continuous hull's primary
+  form is an artist's cage, entered as a tree primitive with its distance defined once in Geometry.Csg;
+  detail is cut into its evaluated surface. Automatic cage generation is research and gates nothing.
+- `brush-tree:ruling:boolean-cleanup-tighter-curve-wins` (Operator): detail is boolean cuts into the
+  evaluated hull, and the weld cleanup is automated by her rule. Her words: "the surface with the
+  tighter curve defines the silhouette of the cut, and the spare vertices that come from the flatter
+  surface all get merged away."
+- `brush-tree:ruling:panel-lines-by-split-boolean-r2` (Operator): a panel line is a through-cut that
+  keeps both sides; the stack's one-segment Bevel and Weighted Normal turn the split into a seam. The weld
+  rule applies to its seams too. It is the only panel-line method: the operator chose geometry over
+  parallax decals (`aetheria-release:ruling:panel-lines-are-geometry`), so hull panel lines are in this
+  campaign's scope.
+- `brush-tree:ruling:primary-form-is-the-hand-cage` (Defaulted): research generators are scored against
+  the hand cage's limit surface, not against a masked or smoothed scan.
+- `brush-tree:ruling:representation-per-hull`: cages for continuous bodies like Dexter Quiet, primitives
+  for mechanical hulls like the squatter mech ship.
+- `brush-tree:ruling:shippable-part-bar`, `:no-unownable-tools-in-loop`, `:openscad-target`,
+  `:brokkr-beats-blender-mcp`, `:cli-not-mcp`, and the defaulted rulings on the Blender sink, `run`, docs
+  lookup, look files, the per-ship tree `.cc`, persistence through cultcache-rs, the Package path,
+  Studio and impostors: unchanged from r2.
+- `brush-tree:ruling:pursue-sdf-composition-remeshing` and `:spike-sdf-smin-to-cage`: still in force,
+  but narrowed by `hand-cages-enter-the-tree`. SDF composition with automated remeshing is one research
+  generator among the cage-connectivity candidates, not the production path.
 
-## What changed from r1, in one paragraph
+## What changed from r2, in one paragraph
 
-r1 lowered every hull through mesh CSG with field-derived microbevels. The probes showed CSG cannot
-build Dexter Quiet's continuous curvature (run 2), and the operator ruled the representation per hull.
-A hand-designed cage (run 3, v7: chamfer 0.228 %) beat every automated route; SDF composition with
-smooth-min fuses the body and its sweeps "without breaking a sweat" (run 4) but its program fidelity
-(0.52 %) and the remeshers' flow (runs 5-7: open field loops, 38-69 poles per 1000 vertices, UV area
-distortion 6-10x the designed cage's) fall short. Run 7 also found that the fidelity wall belonged to
-the SDF program, not the remesher: measured against the SDF itself, every remesh sat at 0.01-0.07 %.
-Microbevels from the field are gone: the bar names one-segment mesh bevels.
+r2 made the SDF composition the authority for a continuous hull's shape and derived a fitted cage from
+it, with the operator's hand cage as the measuring stick. Two findings ended that. The
+cage-connectivity pass (`cage-connectivity-prior-art.md` @ 492f83a) found no open method that reaches
+a coarse quad cage at the hand cage's quality. Every method starts from a dense mesh, and only
+Lavoue 2009 reports output at about 200 faces, with n-gons and high valence accepted. The operator then
+ruled her own cages into the tree, and named her detail practice: boolean cuts into the subdivided form,
+then a weld she does by a rule simple enough to automate. So in r3 the cage is authored, not derived.
+The field leaves the production path for continuous hulls. The open engineering problem moves from
+generating connectivity to cleaning booleans on a curved evaluated surface.
 
 ## What the pipeline turns a brush tree into
 
-**The tree** is one typed document per ship (`tree-store-per-ship-cc`): primitives, transforms,
-scoped booleans, and smooth unions with a named radius. Every part (top-level branch) declares its
-representation, `field` or `kernel`. The declaration is authored, never inferred from the shape.
+**The tree** is one typed document per ship (`tree-store-per-ship-cc`). Every part, meaning a top-level
+branch, declares its representation, `cage` or `kernel`. The declaration is authored, never inferred.
+Each part carries a detail list of cutters, each tagged `cut` (remove) or `split` (keep both sides).
 
-**A `field` part** (continuous body, Dexter Quiet) has two layers. The operator, 2026-10-12, on her
-cage: "Note that I'm specifically trying to be faithful here to the curves of the original, and my
-control points can go to unexpected places to achieve that. The cage controls the surface, the cage
-is not the surface." Her cage carries the primary form (silhouette and main curves); the canopy,
-vents, intakes and nose details are absent by design.
+**A `cage` part** (continuous body, Dexter Quiet):
 
-- **Primary-form layer.** Owner: the part's field, in the tree.
-  1. Field: a signed-distance composition of the large forms (body, wing, pods, fused sweeps), every
-     primitive and blend defined once in Geometry.Csg. Hard edges meant to be crisp are declared as
-     creases (a hard `max`, run 4's wing rim), not detected afterwards.
-  2. Cage, derived: a coarse quad-dominant control cage whose crease edges form closed loops on the
-     declared creases, with its control points *fitted* so the Catmull-Clark limit surface lies on the
-     field's zero set. The control points sit off the surface; producing the cage is subdivision-surface
-     fitting (Hoppe et al. 1994; Marinov and Kobbelt 2005), not remeshing the surface.
-  3. Evaluated mesh: the operator's own stack, Mirror, Subdivision (limit surface), Bevel (one segment,
-     on the creases), Weighted Normal (`dexter-quiet-cage/README.md`). Seams lie on the closed crease
-     loops and part boundaries; run 7 showed seams through a broken crease join wing top and bottom.
-- **Detail layer.** Owner: the part's detail brushes, in the tree. Canopy, vents, intakes and nose
-  details are brushes placed on the evaluated limit surface. They never move the cage, and the cage
-  never encodes them. How a detail brush lowers onto a curved subdivision surface is not known yet
-  (below).
-- **Output:** the cage with its stack and the lowered detail, as objects in the ship's `.blend`;
-  Package applies and exports them.
+1. **Primary form: the cage primitive.** The tree holds control points, faces (quads and triangles),
+   edge crease weights and the mirror plane. She authors it in Blender. A `brokkr-ctl` commit reads the
+   cage object and commits it as a new revision of the part against its base revision. After that the
+   Blender cage object is a projection, and an edit to it is a proposed commit, as for any brush proxy.
+   A commit is refused when a crease chain is open and does not end on the mirror plane (her finding:
+   open crease paths give "horrible geometry" in Blender's Catmull-Clark).
+2. **Evaluated mesh, derived.** Mirror, then Catmull-Clark to the limit surface at a declared level,
+   with Blender's crease rules (`one-subdivision-rule`). Who runs this evaluation is question
+   `cage-evaluator`.
+3. **Detail, derived from cutters.** Each cutter is a kernel brush, lowered alone to a closed mesh.
+   - `cut`: the evaluated mesh minus the cutter (gun ports, vents, intakes).
+   - `split`: the evaluated mesh minus the cutter, plus the evaluated mesh intersected with the cutter,
+     kept as two pieces that share one seam loop. This is how every panel line is made; there is no
+     decal path.
+   Every intersection loop is then welded by the rule below, and its edges get the bevel weight.
+   Detail never moves the cage. Outside a band around each loop, the output's vertices are the evaluated
+   mesh's vertices, unchanged.
+4. **Shipped stack on the output object:** Bevel (one segment, limited by weight: the crease loops
+   plus every cut and split loop), then Weighted Normal. Seams for UVs lie on closed crease loops, part
+   boundaries and split loops, so every panel is its own island.
 
-**What the probes tested.** Position fitting was tested: run 3 fitted a designed cage's control points
-to the scan by least squares on the limit operator (v7, chamfer 0.228 %), run 4 refit a cage to the
-field, run 6 refit Instant Meshes cages of 144-342 faces (best 0.527 % lowered, 103 poles per 1000
-vertices). Runs 5-7 otherwise remeshed the surface, which cannot yield a cage of this kind. What no run
-tested is generating cage *connectivity* automatically: run 3's topology was designed by hand, and run
-6's came from a remesher at cage density, which was blocky and pole-heavy.
+**The weld rule**, as specified for the spike (`boolean-cleanup-prior-art.md` @ 34cccf3 found it
+nowhere under any name):
 
-**A `kernel` part** (mechanical, the squatter mech ship): the polygon kernel builds exact planar faces
-with scoped booleans, a one-segment bevel on hard edges, face-weighted normals, and UVs from each
-brush's declared charts. The r1 kernel machinery and its open questions serve this path.
+- Along each intersection loop, compare the two surfaces' normal curvature across the loop. The across
+  direction is the surface tangent perpendicular to the loop tangent.
+- The surface with the larger magnitude owns the loop. The loop's vertices are sampled at the owner's
+  resolution and lie on the owner's surface.
+- The yielding surface's vertices within one ring of the loop, plus any of its loop vertices that are
+  not owner vertices, collapse onto the nearest owner loop vertex.
+- A collapse is refused if it flips a triangle or drops the worst angle below a floor. This is the
+  Manifold `CollapseEdge` guard (same file, s.1).
+- In a `split`, the two pieces weld their shared loop identically, so the seam stays closed vertex for
+  vertex.
+
+Undefined so far, and named as the spike's failure cases: equal curvature, saddles where the across
+direction changes sign, a loop crossing a crease, and an ownership switch partway along one loop.
+
+**A `kernel` part** (mechanical, the squatter mech ship): unchanged from r2. The polygon kernel builds
+exact planar faces with scoped booleans, a one-segment bevel on hard edges, face-weighted normals and
+UVs from each brush's declared charts. Its cutters use the same boolean and weld as a cage part's
+detail.
 
 **Both** reach Aetheria the same way (`lowered-hull-through-package`): an object in the ship file,
-exported by the existing Package. Nothing reads a cage, mesh or render back as truth.
+exported by the existing Package. Nothing reads an evaluated mesh, cut mesh or render back as truth.
+
+### Distance for a cage primitive, stated honestly
+
+`one-distance-per-primitive` holds for the cage. Its distance is defined once in Geometry.Csg as the
+unsigned distance to the limit surface, signed by winding number. The cost is the honest part.
+
+- The limit surface has exact evaluation: Stam 1998, OpenSubdiv `LimitStencilTable`, and run 3's
+  `X = S c`, linear in the cage. A closest point on it comes from a Newton search
+  (Marinov and Kobbelt 2005). So the distance is computable (`subd-cages-mixed-hulls-and-open-kernels.md`
+  @ 390db63, s.1).
+- No source gives a **cheap distance bound** away from the surface, that is, a Lipschitz-safe lower
+  bound usable for sphere tracing, Newton projection from afar, or smooth-min composition with other
+  primitives. The r1 field assumed one for every primitive.
+- So the cage primitive is refused inside any field composition (smooth union, hard `max` crease) and in
+  sphere tracing (`no-silent-skips`). Its distance serves measurement only: heatmaps, scores and fit
+  residuals, evaluated near the surface from a dense limit sample. Nothing in the production path needs
+  more. A bound, if one is ever needed, is research.
+
+### Where SDF composition still has a role
+
+- **As a research generator.** An SDF program with smooth-min, remeshed and refit to a cage (runs 4-7),
+  is one candidate source of cage connectivity. It is scored like any other candidate.
+- **As the kernel brushes' distance.** `field.rs` stays the one distance for kernel primitives, for
+  heatmaps and scores.
+- **Not as a part representation.** No production part is a `field` part, and smooth union leaves the
+  production vocabulary. A generator's output, if it ever meets the bar, enters as a cage, and so does
+  every continuous hull.
+
+### Authority map (r2 to r3)
+
+- **Owner of a continuous hull's primary form:** the cage primitive in the tree. The field is no longer
+  an owner. The cage is no longer derived from the field; it is authored and committed.
+- **Inputs:** the operator's cage object in Blender (through the commit primitive only), the part's
+  cutter brushes.
+- **Outputs:** the lowered part object (evaluated, cut, split and welded mesh, with bevel weights), and
+  scores.
+- **Derived state:** the evaluated mesh, the cutter meshes, the cut mesh, UV islands, heatmaps, renders.
+  These are cache only, regenerated per revision.
+- **Forbidden writers:** the SDF program, the cage fitter and any remesher writing a production cage.
+  They write research artifacts only, and a research cage enters only by a commit like any other. Also
+  forbidden: Blender's Boolean modifier, or hand edits to the lowered object, deciding the shipped
+  detail.
+- **Shared paths:** the operator's cage edit, a model's script edit and a research generator's
+  candidate all enter through the one commit primitive. Cut-in and split use one boolean and one weld.
+  Kernel parts' cutters use the same boolean.
+- **Deletion line:** r2's "cage connectivity generator" and "cage fitter" leave the production owner
+  table and become research ports. `field` leaves the per-part representation enum. Smooth union is not
+  added to the tree vocabulary.
 
 ### Owners, inputs, outputs, mock points
 
 | Owner | Inputs | Outputs | Mock point |
 |---|---|---|---|
-| Tree (Geometry.Csg) | text through the one commit primitive | typed tree revision | in-memory store |
-| Field | tree part | distance and gradient at a point | trait; analytic test shapes |
-| Cage connectivity generator | field, declared creases, target face budget | cage connectivity with crease flags | trait; the hand cage is a fixed implementation |
-| Cage fitter | cage connectivity, field, subdivision rule | fitted control points | linear limit operator, injectable |
-| Detail lowering | detail brushes, evaluated limit mesh | detail geometry | trait |
-| Kernel | tree part | mesh with per-face brush and surface ids | trait |
+| Tree (Geometry.Csg) | text or a cage object, through the one commit primitive | typed tree revision | in-memory store |
+| Cage evaluator | cage primitive, level | evaluated mesh (mirror applied) | trait; Blender's output as the oracle (`cage-evaluator`) |
+| Cutter lowering | cutter brush | closed cutter mesh | the kernel, per brush |
+| Boolean | evaluated mesh, cutter mesh, `cut` or `split` | pieces, intersection loops with both sides' faces | trait; kernel chosen by the spike |
+| Weld | pieces, loops, the two surfaces' curvature | welded pieces, loop edges with bevel weight | pure mesh math |
+| Kernel | kernel part | mesh with per-face brush and surface ids | trait |
 | Scorer | two meshes | the bar's numbers | pure mesh math, no Blender |
-| Brokkr bridge | intents from `brokkr-ctl` | receipts, objects in the ship file | directory store or loopback, per `blender-transport` |
+| Research generators | a reference (scan or SDF program) | candidate cage | port; never a production writer |
+| Brokkr bridge | intents from `brokkr-ctl` | receipts, cage reads, objects in the ship file | directory store or loopback, per `blender-transport` |
 
-The connectivity generator is the owner nobody has built: runs 5-7 produced dense field-aligned
-meshes, and run 6's cage-density remesh was blocky. It sits behind a port so that candidates can be swapped and scored against the bar below.
+## The hand cage
 
-## The hand cage as the measuring stick
+**What it is** (`docs/research/dexter-quiet-cage/` @ d426f86, note @ 4b55c58): half hull of 29 vertices
+and 25 faces (19 quads, 6 triangles); about 50 faces mirrored. Nine creases form one chain that the
+mirror closes into a loop round the wing rim. At level 3 it evaluates to 3,154 vertices and 3,152 quads,
+with 31 irregular vertices and no UVs. Against the scan (vertex to nearest vertex, % of the 1.492
+diagonal): cage to scan mean 0.88, p95 2.04, max 3.11; scan to cage mean 1.29, p95 4.12, max 6.03.
+Those numbers mix her declared liberty with detail the cage omits by design. They describe the
+reference; they are not a bar any production output is held to.
 
-**What it is** (GameCult.Geometry.Csg `docs/research/dexter-quiet-cage/` @ d426f86, measured
-2026-10-12 from `cage_raw.obj` and `cage_eval.obj`):
+**It is the production primary form, not only the yardstick.** Production fidelity is by construction:
+away from detail loops, the shipped part is the cage's limit surface.
 
-- Half hull: 29 vertices, 25 faces (19 quads, 6 triangles), the mirror seam open (12 boundary edges).
-  Mirrored, about 50 faces for the whole hull.
-- Creases: 9 edges at 1.0 forming one chain, vertex 5 (x = 0, nose) to vertex 22 (x = 0.003, tail),
-  so the mirror closes it into one loop round the wing rim.
-- Evaluated at subdivision level 3: 3,154 vertices, 3,152 faces, all quads, no boundary, 31 vertices
-  of valence other than 4 (about 10 per 1000 vertices).
-- No UVs.
-- Fidelity to the scan, vertex to nearest vertex, % of the hull diagonal (1.492):
-  cage to scan mean 0.88, p95 2.04, max 3.11; scan to cage mean 1.29, p95 4.12, max 6.03.
+**Research generators are scored against it** (`primary-form-is-the-hand-cage`). A candidate's
+evaluated limit surface is compared with the hand cage's (Mirror, limit, no Bevel) vertex to nearest
+vertex both ways, at half to double 3,154 vertices, and by three-axis silhouette IoU. Every measurement
+reports the candidate's source against its reference and the candidate cage against its own source
+separately, besides the end-to-end number; run 7 lost a spike to an unattributed number. The scan is the
+reference only for the hand cage's own recorded liberty. A candidate is interesting when it is no worse
+than the hand cage's own spread and meets the cage bar: at most about 200 faces (4x), quads and
+triangles only with at most 24 % triangles, closed creases, and a watertight level-3 limit mesh with at
+most 62 irregular vertices. Meeting the bar makes a candidate committable as a cage. It gates nothing
+else.
 
-**Why the scan stays the shape reference.** She was "specifically trying to be faithful here to the
-curves of the original"; the liberty she took was a concession to Blender's creases ("I'm afraid I had
-to take a bit of artistic liberty to get the cage to behave, mostly because of how creases work in
-Blender (generates horrible geometry if the crease path isn't closed)"). So the scan's primary form is
-the shape, and the cage's departures from it are a tolerance band.
+## Not yet known (owed before or during the next cuts)
 
-**The six numbers above are not the bar yet.** They mix two things: her liberty, and the detail the
-cage omits by design (scan to cage max 6.03 % is most likely the canopy or a vent, not the curves). A
-fidelity bar must measure primary form only. How primary form is separated from detail is question
-`primary-form-measure`; the recommendation is a detail mask the operator paints once on the scan.
-
-**The fidelity bar.** The primary-form layer's evaluated output, measured against the scan with detail
-excluded by that rule, vertex to nearest vertex in both directions at a vertex count within half to
-double the cage's 3,154, is no worse than the hand cage measured the same way, in mean, p95 and max;
-and its silhouette IoU from the three axes is no lower than the hand cage's. The hand cage's numbers
-under the rule, and its score under the shared scorer (chamfer, F@2 %, silhouette IoU, run 4's
-`tools/common.py`), are recorded as body facts before the first cut is measured. Until then the six
-numbers above are a loose upper bound only.
-
-**Attribution.** Every measurement reports two parts separately: the program's zero set against the
-scan, and the cage's limit surface against the field. Run 7 misdiagnosed the wall for a whole spike
-because only the end-to-end number existed.
-
-**The cage-quality bar**, from the same cage:
-
-- Size: at most 4x the hand cage's face count for the hull (about 200 faces). The factor is a proposal.
-- Faces: quads and triangles only, no n-gons; triangle share at most the hand cage's (6 of 25, 24 %).
-- Creases: every crease chain is a closed loop, or ends on the mirror plane where its mirror closes it.
-- Limit mesh at level 3: one shell, watertight, at most 2x the hand cage's 31 irregular vertices.
-- UVs (the cage has none, so this comes from the bar's words and run 3's v7): islands follow parts,
-  seams on crease loops and part boundaries, mean |log2| area distortion at most 0.1 (v7: 0.076).
-
-## Not yet known (research owed before cuts are mapped)
-
-- **How the cage's connectivity is generated for fitting.** Position fitting is covered and tested.
-  Connectivity is not: Hoppe et al. 1994 optimise the control mesh's connectivity as one phase, and
-  Marinov and Kobbelt's Solid Modeling 2004 version restructures the control mesh adaptively, but the
-  research file has neither full text read (subd-cages file s.1, Gaps). Other candidates: a quad layout
-  from the cross field (patent US 12086939; Kloiber and Augsdorfer 2020), QEM simplification to a base
-  mesh, a coarse remesh then refit (run 6), a template cage refit (run 7 "Next" item 4).
-- **How a detail brush lowers onto the limit surface** (a boolean into the evaluated mesh, an inset in
-  the cage, or a separate interpenetrating piece). The research found booleans on curved surfaces give
-  stretched faces and no convention for subd body plus primitive inserts (subd-cages file s.0, s.5).
-- **What text authors a `field` part.** OpenSCAD has no smooth union, so `openscad-target` and
-  `text-is-a-surface` from r1 cannot both hold for smooth-min parts.
-- **How a `field` part and a `kernel` part meet** on one hull. The research found no convention
-  (subd-cages file s.0, s.5).
+- **The weld rule's behaviour on real geometry.** It has never been run. The spike brief is
+  `spike-boolean-weld.md` (Self's scratch); its measures and failure cases decide whether the rule ships
+  as stated, needs a tiebreak, or needs the cutter tessellated to the hull's density.
+- **Which boolean kernel:** Manifold through `manifold-csg` (Apache-2.0, C++ underneath, with provenance
+  and its own degenerate cleanup), boolmesh (pure Rust, MPL-2.0, released 2026-10-11, 0 % doc coverage),
+  or an extension of the crate's own kernel. The spike measures the first two; the crate's kernel is
+  planar-convex today.
+- **Who evaluates the cage** for the lowering: question `cage-evaluator`.
+- **Split pieces' interior caps:** a through-cut of a closed hull leaves cross-section caps inside both
+  pieces. Whether they are kept (closed pieces, hidden triangles) or dropped (open pieces) depends on how
+  Bevel and Weighted Normal treat the open boundary. The spike probes it.
+- **How a `cage` part and a `kernel` part meet** on one hull. Under r3 a union with the same boolean and
+  weld is the natural candidate, but nothing has measured it.
+- **Text for a cage part.** It prints as a polyhedron-like `subdivision_cage(points, faces, creases,
+  mirror)`. OpenSCAD would render the cage's control polyhedron, not its limit surface, so cage parts sit
+  outside the "OpenSCAD renders it the same" half of `text-round-trips`, as smooth-min parts did in r2.
 
 ## Research it rests on
 
 All in GameCult.Geometry.Csg `docs/research/` on `eureka/brush-tree`:
 
-- `dexter-quiet-cage/` @ 4b55c58: the reference cage, the primary-form note and her screenshots (cage files @ d426f86).
-- `shippable-bar/` @ 253f34d: the operator's bar and render.
-- `mesh-probe-run1/` to `mesh-probe-run7-im-field/`: OpenSCAD and CSG fits (1), CSG lowerings (2),
-  a designed cage (3), SDF with smin and a field cage (4), QuadriFlow (5), Instant Meshes (6), the
-  Instant Meshes fork with the SDF's cross field and a hard rim (7).
-- `subd-cages-mixed-hulls-and-open-kernels.md` @ 390db63: cage fitting, remeshers as cage seeds,
-  creases versus bevels, mixed assets, open kernels.
-- `primitive-seams-and-sdf-bevel-meshing-prior-art.md`, `brush-surfaces-and-sdf-bricks-prior-art.md`,
-  `openscad-evaluators-and-csg-export.md`, `octahedral-impostors-prior-art.md`: the kernel path.
+- `dexter-quiet-cage/` @ 4b55c58: the reference cage, the primary-form note, her screenshots (cage files
+  @ d426f86).
+- `cage-connectivity-prior-art.md` @ 492f83a: no open method reaches a coarse quad cage at this quality.
+- `boolean-cleanup-prior-art.md` @ 34cccf3: no named precedent for the weld rule; Manifold's collapse
+  guard; Adaptive Mesh Booleans' failure modes; ownable kernels.
+- `detail-on-subd-prior-art.md` @ c513992: cut into the evaluated mesh is the only option that keeps the
+  cage independent and regenerable; support loops grow the cage.
+- `sdf-authoring-text-prior-art.md` @ 6a575d2: no SDF tool round-trips a typed tree through text.
+- `subd-cages-mixed-hulls-and-open-kernels.md` @ 390db63: limit evaluation, closest point, no cheap
+  bound.
+- `shippable-bar/`, `mesh-probe-run1/` to `mesh-probe-run7-im-field/`,
+  `openscad-evaluators-and-csg-export.md`, `primitive-seams-and-sdf-bevel-meshing-prior-art.md`,
+  `brush-surfaces-and-sdf-bricks-prior-art.md`, `octahedral-impostors-prior-art.md`: as in r2.
