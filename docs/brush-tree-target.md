@@ -168,7 +168,7 @@ because only the end-to-end number existed.
 
 All in GameCult.Geometry.Csg `docs/research/` on `eureka/brush-tree`:
 
-- `dexter-quiet-cage/` @ d426f86: the reference cage.
+- `dexter-quiet-cage/` @ 4b55c58: the reference cage, the primary-form note and her screenshots (cage files @ d426f86).
 - `shippable-bar/` @ 253f34d: the operator's bar and render.
 - `mesh-probe-run1/` to `mesh-probe-run7-im-field/`: OpenSCAD and CSG fits (1), CSG lowerings (2),
   a designed cage (3), SDF with smin and a field cage (4), QuadriFlow (5), Instant Meshes (6), the
