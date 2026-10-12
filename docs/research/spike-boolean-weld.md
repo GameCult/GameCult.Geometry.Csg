@@ -7,7 +7,98 @@ Agent `spike-bt-boolean-weld`, 2026-10-12. A spike, not a cut: the code under `s
 Her words, the spec of the rule: "the surface with the tighter curve defines the silhouette of the cut, and the spare
 vertices that come from the flatter surface all get merged away."
 
-## Answer
+## Round 2: ruling weld-owner-defines-silhouette
+
+The operator answered round 1's question (ruling `weld-owner-defines-silhouette`, superseding
+`boolean-cleanup-tighter-curve-wins`):
+
+> "When i cut a panel line with a flat cutter, it's the hull's vertices that define the silhouette, so they survive,
+> this is what the tighter curve rule is for. When I cut a small thing out of a bigger thing like your first example
+> (which looks like a sphere cutting into a flat surface to make a dimple), the bigger thing is contributing fewer
+> (none, in your example) vertices to the silhouette, so its vertices get merged away"
+
+Implemented in `spikes/boolean-weld/py/owner_weld.py`, run by `py/run2.py`, with boolmesh output (Manifold's is
+identical, round 1).
+
+- **Owner:** curvature along the loop.
+- **Spare vertices merged:**
+  - `loop`: a loop vertex made only by the yielding side's edges merges into the nearest owner-made loop vertex.
+  - `ring`: where the cutter owns, hull vertices one ring off the loop merge onto it.
+  - `snap`: where the hull owns, a loop vertex the boolean inserted on a hull edge, within SNAP local edge lengths
+    of an existing hull vertex, merges into that hull vertex. This is Self's specification: the hull vertex survives
+    and the loop goes through it.
+- **Splits:** both pieces are welded jointly, and every operation must pass both pieces' guards or it is refused.
+  In the piece that lacks the surviving hull vertex, the loop vertex moves to it.
+- **Guard thresholds:** worst angle 10 and 5 deg, both reported; SNAP 0.25 and 0.5 h.
+- **New probe:** a vertical cylinder of r 0.03, 16 and 48 segments, cut through the wing-rim crease (a notch).
+
+Full tables: `spikes/boolean-weld/results/round2/table2-*.md`. Tags: `a10s25` = 10 deg and SNAP 0.25 h; `a5s50` =
+5 deg and SNAP 0.5 h; `r*` = the reverse snap direction.
+
+### Answer, per case family
+
+- **Small curved cutter in a larger surface (gun ports, dimple probes): the rule works.** The cutter owns the loop
+  and the hull's spare vertices merge away.
+  - Port, 16 segments, at 10 deg: slivers 32 to 5, worst angle 0.007 to 5.09 deg, p5 1.14 to 6.68 deg, silhouette
+    unchanged (0.0198 %), 0 flips, 0 vertices moved outside the band. Edges under the bevel width touching the loop
+    drop from 6 to 0. The 5 deg guard gives the same numbers.
+  - At 48 segments the hull-side fans to the dense cutter remain: slivers 227 to 211 (10 deg) or 207 (5 deg). The
+    cutter's tessellation should stay near the hull's density.
+- **Flat cutter splitting the hull (panel line): the rule as specified does not fix the seam, and it bends it.**
+  - At 10 deg and 0.25 h, both pieces accepted 16 of 78 snaps; 35 were refused on angle, 25 on flips and 2 on the
+    link condition.
+  - Slivers 97 to 85 on the subtract piece and 92 to 82 on the intersect piece.
+  - The worst angle is unchanged: 0.058 deg and 0.056 deg.
+  - Seam crack 0. The joint guard holds, so both pieces' loops stay identical.
+  - At 5 deg / 0.25 h: 22 snaps applied, slivers 83 / 79. At 5 deg / 0.5 h: 54 applied, slivers 71 / 64.
+  - Where they are: hull-side slivers barely move (37 to 35 and 32 to 32). The worst angle and most slivers (61 per
+    piece) are in the planar cap's triangulation, which no vertex merge reaches.
+  - The cost: the seam leaves the cutter's plane, by up to 0.40 % of the diagonal (0.23 h) at 0.25 h and 0.95 %
+    (0.56 h) at 0.5 h. After Bevel and Weighted Normal this shows as visible kinks and a step in the panel line
+    (`r2_splitclose.jpg`). The naive seam stays straight apart from one bright sliver highlight. Her Longinus seams
+    are straight bevelled grooves (`r2_longinus_vs_split.jpg`).
+  - The reverse direction does no better. Sliding the hull vertex onto the loop keeps the seam on the plane, but the
+    guards refuse nearly all of it (1 of 78 applied at 10 deg / 0.25 h; 11 of 156 at 5 deg / 0.5 h), and it moves
+    hull vertices up to 0.38 h off the hull surface.
+- **Equal curvature, saddle, ownership switch: the rule cleans up but does not reach the needles.**
+  - Slivers: equal-k 87 to 35 (10 deg) or 31 (5 deg); saddle 50 to 25 or 26; switch 112 to 54 or 53.
+  - Worst angle: the 1e-6 to 3e-3 deg needles survive at 10 deg. At 5 deg equal-k reaches 0.71 deg.
+  - The hull-owned stretches now snap, so the loop moves where ownership flips to the hull: equal-k 0.056 to 0.098 %
+    (0.13 h), switch 0.013 to 0.32 % (0.16 h).
+  - The saddle's 1 "flipped" near-vertical sliver remains at 10 deg and is gone at 5 deg.
+- **Crease: the rule works.**
+  - Curved cutter (the notch): the cutter owns the arc and the hull owns at the 2 crease crossings (6 of 41 loop
+    vertices at 16 segments, 4 and 6 owner switches). Both crease vertices survive, no collapse uses a crease vertex
+    as its source, and the hull's crease bevel weights are untouched (144 weighted edges before and after).
+  - Notch results at 10 deg: 16 segments, slivers 27 to 8, worst angle 0.21 to 3.91 deg (4.31 at 5 deg), edges under
+    the bevel width 4 to 0, silhouette 0.043 to 0.061 %; 48 segments, slivers 64 to 27, worst angle 0.10 to 0.79 deg.
+  - Box across the crease: like the panel split, 40 of 44 slivers remain, the worst angle is unchanged, the seam
+    crack is 0 and the seam moves 0.26 h.
+
+### Renders, round 2
+
+![Longinus vs split](spike-boolean-weld/r2_longinus_vs_split.jpg)
+![split seam close](spike-boolean-weld/r2_splitclose.jpg)
+![split](spike-boolean-weld/r2_split2.jpg)
+![notch 16](spike-boolean-weld/r2_creasecyl16.jpg)
+![notch 48](spike-boolean-weld/r2_creasecyl48.jpg)
+![notch side](spike-boolean-weld/r2_creasecylside.jpg)
+
+### Questions for Self (round 2, text only)
+
+1. On a panel split, the snap makes the hull's vertices the seam's path as well as its silhouette, and the seam
+   kinks. Should the hull vertices survive while the seam stays on the cutter's plane? If so, the seam's cleanup is
+   not a vertex merge but a retriangulation of the cap and of the hull faces next to the loop. That is untested;
+   both pieces would get the same loop, so no crack.
+2. The cap's triangulation holds the worst angle and most slivers of every planar split, and the cap is kept for the
+   bevel. Is the cap ours to remesh? It is interior, planar and invisible except through the Bevel and Weighted
+   Normal it feeds.
+3. Angle bar: 5 deg lets more merges through (split 22 vs 16 at 0.25 h; equal-k worst angle 0.71 vs 1.7e-6) and
+   never produced a flip. 10 deg is safer on the saddle. Both are reported; Self decides.
+
+## Round 1
+
+### Answer
 
 - **As the plan wrote it (owner by curvature across the loop, `u = n x t`), the rule fails on the gun port.** A
   cylinder has zero curvature across its own cut loop (that direction is its axis), so the hull owns 34 of 36 loop
@@ -29,7 +120,7 @@ vertices that come from the flatter surface all get merged away."
   Manifold (manifold-csg 0.4.1 over Manifold v3.5.3) builds in 89 s on Linux and fetches upstream C++ source at
   build time.
 
-## Inputs
+### Inputs
 
 - Hull: `Dexter Quiet Cage` re-exported from a copy of Ships.blend with Bevel and Weighted Normal off (Mirror, then
   Subsurf level 3 with limit surface): 3,010 vertices, 6,016 triangles, 0 non-manifold edges, 0 misoriented, Euler 2
@@ -50,7 +141,7 @@ vertices that come from the flatter surface all get merged away."
   - switch: cylinder r 0.08 across the dorsal ridge.
   - True-curve reference: the same cylinder at 1,024 segments. For planes the boolean loop is exact.
 
-## Weld pass (`py/weld.py`)
+### Weld pass (`py/weld.py`)
 
 1. Loop = edges between a hull-provenance face and a cutter-provenance face, traced into cycles. Neither kernel
    returns the loop or each loop vertex's source edge, so origin is a geometric test: whether the vertex lies on an
@@ -65,7 +156,7 @@ vertices that come from the flatter surface all get merged away."
 6. Candidate change tested (`-snap`), not her rule: the owner's own vertices within 0.25 local edge lengths of a loop
    vertex, and loop edges shorter than the 0.001 bevel width, also collapse, with the same guard.
 
-## Measures (boolmesh; Manifold's numbers are identical)
+### Measures (boolmesh; Manifold's numbers are identical)
 
 Band = triangles whose centroid is within 2 local edge lengths of the loop. Sliver = longest edge squared over twice
 the area > 10, or area < 1e-4 of the mean. Dev = welded loop polyline to the true intersection curve, in % of the
@@ -115,7 +206,7 @@ Shortest edge touching the loop, which bounds the bevel through Bevel's overlap 
 | saddle s16 | 1.4e-6 (19) | 1.4e-6 (3) | 1.4e-6 (9) |
 | split | 2.6e-4 (15) | unchanged | unchanged |
 
-## Per case
+### Per case
 
 1. **Gun port, 16 segments.** With `along` the rule passes, apart from a 5.1 deg worst angle against a 10 deg guard.
    With `across` it fails (see Answer).
@@ -155,7 +246,7 @@ Shortest edge touching the loop, which bounds the bevel through Bevel's overlap 
 
 Locality held everywhere (invariant two-layers): 0 hull vertices moved outside the band in every case and variant.
 
-## Renders
+### Renders
 
 Each sheet shows the naive result, the ownership along the loop (blue = hull owns, orange = cutter owns) under
 `across` and under `along`, and the welded results. Every result is shown after the shipped stack: Bevel 0.001,
@@ -174,7 +265,7 @@ The split sheet shows four panels: both pieces with caps, both pieces without ca
 loop. The crease sheet's framing is poor; its numbers carry the result. Her Longinus panel-line screenshot was not
 available to this agent, so no side-by-side was made with it.
 
-## Kernels
+### Kernels
 
 | | boolmesh 0.2.1 | manifold-csg 0.4.1 (Manifold v3.5.3) |
 |---|---|---|
@@ -189,7 +280,7 @@ available to this agent, so no side-by-side was made with it.
 The "naive" rows are therefore already after each kernel's own degenerate cleanup. It leaves worst angles down to
 1e-6 deg, because epsilon-length collapse does not remove slivers with long edges.
 
-## Smallest changes, in order
+### Smallest changes, in order
 
 1. **Measure curvature along the loop, not across it.** This is the fix. Without it the rule fails the canonical
    gun port; with it the 16-segment port passes.
@@ -204,7 +295,7 @@ The "naive" rows are therefore already after each kernel's own degenerate cleanu
 4. **In a split, apply a collapse only if both pieces' guards accept it.** Replaying one piece's collapses opened a
    crack.
 
-## Questions for Self (text only, not admitted)
+### Questions for Self, round 1 (answered: ruling weld-owner-defines-silhouette)
 
 1. Does "the surface with the tighter curve" mean curvature along the cut, so that the circle comes from the
    cylinder? The plan's `u = n x t` formulation gives the opposite owner for every cylinder cut. The operator should

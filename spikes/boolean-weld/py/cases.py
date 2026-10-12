@@ -88,5 +88,12 @@ add_cyl('probe_saddle', float(sp[0]), float(sp[1]), 0.015, (16, 48), note=f'sadd
 add_split('probe_crease', (0.33, -0.8, -0.6), (0.9, 0.8, 0.6), note='chordwise split x>0.33 crosses the rim crease')
 # probe 4: big cylinder across the dorsal ridge to the flank (ownership switch along one loop)
 add_cyl('probe_switch', 0.0, -0.05, 0.08, (48,), note='r=0.08 across the dorsal ridge')
+# round 2 probe: curved cutter across the wing-rim crease (vertical cylinder through the rim, a notch)
+cvl = sorted(cv0, key=lambda i: np.linalg.norm(V[i, :2] - [0.38, -0.05]))[0]; pc = V[cvl]
+for sg in (16, 48):
+    Vc, Tc = cylinder(pc, np.array([0, 0, 1.0]), 0.03, 0.15, 0.15, sg); Tc = orient_out(Vc, Tc)
+    fn = f'{outd}/probe_crease_cyl_s{sg}.obj'; save_obj(fn, Vc, Tc)
+    cases.append(dict(name=f'probe_crease_cyl_s{sg}', kind='cyl', op='sub', cutter=fn, p=pc.tolist(), n=[0, 0, 1.0], r=0.03, seg=sg, depth=0.15, note=f'vertical cylinder r 0.03 through rim crease vertex {cvl}'))
+Vc, Tc = cylinder(pc, np.array([0, 0, 1.0]), 0.03, 0.15, 0.15, 1024); Tc = orient_out(Vc, Tc); save_obj(f'{outd}/probe_crease_cyl_ref.obj', Vc, Tc)
 json.dump(cases, open(outd + '/cases.json', 'w'), indent=1)
 for c in cases: print(c['name'], c.get('thick'), c['note'])

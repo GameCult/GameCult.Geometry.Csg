@@ -213,5 +213,45 @@
   "thick": 0.2200342785460706,
   "depth": 0.02,
   "note": "r=0.08 across the dorsal ridge"
+ },
+ {
+  "name": "probe_crease_cyl_s16",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_crease_cyl_s16.obj",
+  "p": [
+   0.4225163,
+   -0.0367445,
+   0.0935993
+  ],
+  "n": [
+   0,
+   0,
+   1.0
+  ],
+  "r": 0.03,
+  "seg": 16,
+  "depth": 0.15,
+  "note": "vertical cylinder r 0.03 through rim crease vertex 35"
+ },
+ {
+  "name": "probe_crease_cyl_s48",
+  "kind": "cyl",
+  "op": "sub",
+  "cutter": "cutters/probe_crease_cyl_s48.obj",
+  "p": [
+   0.4225163,
+   -0.0367445,
+   0.0935993
+  ],
+  "n": [
+   0,
+   0,
+   1.0
+  ],
+  "r": 0.03,
+  "seg": 48,
+  "depth": 0.15,
+  "note": "vertical cylinder r 0.03 through rim crease vertex 35"
  }
 ]
