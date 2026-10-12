@@ -46,6 +46,8 @@ def row(name, variant, V, T, prov, c, ref, extra):
 
 
 for name, c in cases.items():
+    if os.environ.get('CASES') and name not in os.environ['CASES'].split(','):
+        continue
     if c['kind'] == 'box' and c['op'] == 'int':
         continue
     cut = Cutter(c)

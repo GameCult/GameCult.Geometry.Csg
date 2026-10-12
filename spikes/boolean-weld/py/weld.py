@@ -87,6 +87,8 @@ class Cutter:
     def __init__(s, c):
         s.c = c; s.kind = c['kind']
         Vc, Fc = load_obj(c['cutter']); s.V, s.T = Vc, triangulate(Fc); s.adj = vertex_adj(s.T, len(Vc))
+        if s.kind == 'obox':
+            s.p = np.array(c['p']); s.R = np.array(c['R']); s.lo = np.array(c['lo']); s.hi = np.array(c['hi'])
         if s.kind == 'cyl':
             s.p, s.r = np.array(c['p']), c['r']
             s.a = np.array(c['n']) / np.linalg.norm(c['n'])
@@ -107,6 +109,10 @@ class Cutter:
             d = x - s.p; er = d - (d @ s.a) * s.a; er = er / np.linalg.norm(er)
             et = np.cross(s.a, er)
             return er, np.outer(et, et) / s.r
+        if s.kind == 'obox':
+            xl = s.R.T @ (x - s.p); dd = np.concatenate([xl - s.lo, s.hi - xl]); i = int(np.argmin(np.abs(dd)))
+            nl = np.zeros(3); nl[i % 3] = -1 if i < 3 else 1
+            return s.R @ nl, np.zeros((3, 3))
         lo, hi = np.array(s.c['lo']), np.array(s.c['hi'])
         dd = np.concatenate([x - lo, hi - x]); i = int(np.argmin(np.abs(dd)))
         n = np.zeros(3); n[i % 3] = -1 if i < 3 else 1

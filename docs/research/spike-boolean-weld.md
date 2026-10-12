@@ -7,6 +7,123 @@ Agent `spike-bt-boolean-weld`, 2026-10-12. A spike, not a cut: the code under `s
 Her words, the spec of the rule: "the surface with the tighter curve defines the silhouette of the cut, and the spare
 vertices that come from the flatter surface all get merged away."
 
+## Round 3: Self's calls and ruling weld-owner-local-corners-kept
+
+Inputs to this round:
+
+- Self's calls: a flat split keeps its seam exactly on the cutter's plane; hull vertices survive; hull-side slivers
+  along a flat seam are repaired by edge flips; the cap faces a cut leaves are ours and get a constrained Delaunay
+  (CDT); worst-angle guard 5 deg.
+- Ruling `weld-owner-local-corners-kept` (operator): ownership is local along the loop, and a hard-edged cutter's
+  corners always survive.
+
+How it was run:
+
+- **Code:** `py/round3.py` for the flat seams; `py/owner_weld.py` with `NOSNAP_FLAT=1 MIN_ANGLE=5` for the curved
+  cutters.
+- **Ownership:** per loop vertex, by curvature along the loop. Nothing in the code takes a loop-wide vote.
+- **Protected corners:** loop vertices on a sharp cutter edge (dihedral > 30 deg) or on a hull crease edge. They are
+  never a merge source and never moved.
+- **Edge flips:** greedy. A flip must raise the pair's worst angle and keep both normals within 20 deg. Seam and
+  crease edges are constrained.
+- **CDT:** Shewchuk's Triangle through the `triangle` package (Python wrapper LGPL-3.0; the Triangle core's licence
+  bars commercial use, so it is fine for this spike and not shippable). Variants:
+  - `cdt`: plain CDT, loop as the boundary.
+  - `cdt-q`: CDT with a 20 deg quality bound, interior Steiner points only (`pq20Y`), so the seam is never split.
+- **Short seam merge (`short`):** consecutive seam vertices closer than the 0.001 bevel width merge, jointly on both
+  pieces. Both endpoints lie on the plane, so the seam stays on it. Only boolean-inserted vertices are merged away.
+- **New probes:** a box cut into the curved flank (`probe_box_flank`, half-width 0.02) and a box across the dorsal
+  ridge (`probe_box_ridge`, half-width 0.06). Each is rotated off the tessellation, with its sharp vertical edges on
+  the loop.
+
+Tables: `spikes/boolean-weld/results/round3/`.
+
+### Flat seams (seam on the plane; hull side and cap reported separately)
+
+| case | variant | hull slivers | hull worst deg | hull p5 deg | cap slivers | cap worst deg | flips | seam off plane | seam crack | seam-adjacent edges < bevel width |
+|---|---|---|---|---|---|---|---|---|---|---|
+| panel split, subtract piece | naive | 37 | 0.676 | 3.86 | 85 / 122 | 0.058 | 0 | 3e-16 | 0 | 15 |
+| | flip + cdt | 28 | 0.676 | 4.69 | 80 / 122 | 0.122 | 0 | 3e-16 | 0 | 15 |
+| | flip + cdt-q | 28 | 0.676 | 4.69 | 0 / 332 | 6.76 | 0 | 3e-16 | 0 | 23 |
+| | short + flip + cdt-q | 26 | 0.676 | 5.30 | 1 / 313 | 5.50 | 0 | 3e-16 | 0 | 16 |
+| panel split, intersect piece | naive | 32 | 0.539 | 4.36 | 85 / 122 | 0.056 | 0 | 3e-16 | 0 | 14 |
+| | short + flip + cdt-q | 17 | 0.539 | 6.69 | 1 / 313 | 5.50 | 0 | 3e-16 | 0 | 16 |
+| box across the crease, subtract piece | naive | 22 | 0.377 | 3.73 | 22 / 82 | 0.033 | 0 | 7e-16 | 0 | 12 |
+| | short + flip + cdt-q | 12 | 2.41 | 6.64 | 3 / 147 | 0.714 | 0 | 7e-16 | 0 | 6 |
+| box across the crease, intersect piece | naive | 25 | 0.0405 | 5.61 | 22 / 82 | 0.033 | 0 | 7e-16 | 0 | 11 |
+| | short + flip + cdt-q | 10 | 0.0405 | 7.14 | 3 / 147 | 0.714 | 0 | 7e-16 | 0 | 5 |
+
+- **Flips applied:** 138 and 99 on the split; 65 and 79 on the crease box.
+- **Short seam merges:** 3 on the split, 4 refused by the 5 deg guard; 5 on the crease box, 1 refused. They move the
+  seam polyline by at most 0.0069 % and 0.0040 % of the diagonal, within the plane.
+- **The seam stays on the plane to float** (3e-16), the two pieces' seams coincide (crack 0), and nothing flips.
+- **The cap CDT with interior refinement removes the cap's slivers.** Cap worst angle 0.058 to 5.5 deg (6.8 deg
+  without the short merge); the crease box's cap reaches only 0.71 deg. Plain CDT cannot: the cap is a long thin
+  polygon, and with no interior points its worst angle only reaches 0.12 deg.
+- **The hull side's worst angle does not move** (0.676, 0.539 and 0.0405 deg). It is a triangle whose two vertices
+  are a boolean-inserted seam vertex and a hull vertex almost on top of it. Flips cannot remove the edge between
+  them: two nearly coincident points stay connected in any Delaunay-like triangulation. With both points pinned (the
+  seam on the plane, hull vertices surviving), that angle stays. The seam-adjacent edges shorter than the bevel width
+  remain for the same reason (15 to 16).
+- **Render** (`r3_longinus_vs_split.jpg`, `r3_r3split.jpg`): the round-3 seam is straight, crisp and continuous for
+  most of its length. That is better than round 2's kinks, and its seam no longer shows round 1's sliver highlight.
+  Where the short seam-adjacent edges sit, the bevel narrows and a light wedge appears: Bevel's overlap clamp (on in
+  the cage's own modifier) caps the width at the shortest adjacent edge. Turning the clamp off (`r3_r3clamp0.jpg`)
+  gives a constant-width groove but overlapping bevel geometry: a spike on the round-3 seam, sawtooth on the naive
+  one. So her uniform Longinus groove is not reached yet. Reaching it needs those near-coincident seam/hull vertex
+  pairs resolved. Either the hull vertex moves onto the seam within the hull's own surface (it survives, displaced
+  by less than the bevel width), or Self's no-move call is relaxed for vertices within the bevel width.
+
+### Curved and hard-edged cutters (owner rule, local ownership, corners kept, 5 deg)
+
+| case | variant | slivers | worst deg | p5 deg | flips | silhouette dev max | corners kept / total |
+|---|---|---|---|---|---|---|---|
+| gun port 16 (regression) | naive | 32 | 0.007 | 1.14 | 0 | 0.0198 % | 0 / 0 |
+| | owner r3 | 5 | 5.09 | 6.68 | 0 | 0.0198 % | 0 / 0 |
+| ownership switch r 0.08 | naive | 112 | 1.2e-6 | 0.62 | 0 | 0.0128 % | |
+| | owner r3 | 53 | 1.2e-6 | 2.65 | 0 | 0.323 % | 4 / 4 |
+| crease notch 16 | owner r3 | 10 | 4.31 | 6.83 | 0 | 0.061 % | 2 / 2 |
+| box in flank (corners on loop) | naive | 3 | 0.285 | 6.62 | 0 | 0 | |
+| | owner r3 | 2 | 0.285 | 9.61 | 0 | 0.0108 % | 4 / 4 |
+| | hull-side flips (24) | hull 0 (was 2) | hull 6.0 (was 0.95) | hull 12.1 | 0 | 0 | 4 / 4 |
+| box across ridge | owner r3 | 66 | 0.070 | 1.41 | 0 | 0.0014 % | 6 / 6 |
+| | hull-side flips (118) | hull 7 (was 19) | hull 1.75 (was 0.72) | hull 7.24 | 0 | 0 | 6 / 6 |
+
+- **Corners:** no corner was moved or lost in any case. `corners_kept_in_place` equals `corners` everywhere, and the
+  guard turned away 4 merges on the flank box and 6 on the ridge box (`protected_corner`).
+  - On the ownership-switch probe, the 4 corners are where the r 0.08 cylinder's floor rim breaks through the ridge.
+  - On the crease notch they are the 2 rim-crease crossings; on the flat splits, the 4 crease crossings.
+- **Ownership on the box cut-ins:** the hull owns every stretch (box faces have zero curvature along the loop), no
+  vertex snaps (flat), and the box contributes its corners. That matches her "keep the first's corners".
+- **The ridge box's pocket walls keep 48 slivers.** They are the cutter's own faces, trimmed by the hull. They are
+  not a planar cap, so this round did not re-triangulate them.
+- **The port regression is unchanged** from round 2: slivers 5, worst 5.09 deg, silhouette unchanged.
+- **The ownership switch** keeps its owner-side 1.2e-6 deg needle and round 2's 0.32 % loop movement on the
+  hull-owned stretches, where curved-cutter snapping is still on.
+
+### Renders, round 3
+
+![Longinus vs split, round 3](spike-boolean-weld/r3_longinus_vs_split.jpg)
+![split seam](spike-boolean-weld/r3_r3split.jpg)
+![split wide](spike-boolean-weld/r3_r3splitwide.jpg)
+![clamp off](spike-boolean-weld/r3_r3clamp0.jpg)
+![crease box](spike-boolean-weld/r3_r3crease.jpg)
+![box in flank](spike-boolean-weld/r3_r3boxflank.jpg)
+![box across ridge](spike-boolean-weld/r3_r3boxridge.jpg)
+![port regression](spike-boolean-weld/r3_r3port16.jpg)
+![switch](spike-boolean-weld/r3_r3switch.jpg)
+
+### Questions for Self (round 3, text only)
+
+1. A flat seam's residual worst angle and short bevel-clamped edges come from a boolean-inserted seam vertex lying
+   almost on a hull vertex. Under "seam on the plane, hull vertices survive" both are pinned. Should a hull vertex
+   within the bevel width of the seam be allowed to slide onto the seam inside the hull's surface? It still survives,
+   moved by less than 0.001.
+2. Curved-cutter snapping on hull-owned stretches still moves the loop (switch probe 0.32 %). Should the round-3
+   no-snap apply to every hull-owned stretch, curved cutter or not?
+3. The CDT here uses Triangle, whose licence bars commercial use. A shippable cap CDT needs an owned implementation
+   or a permissive crate (for example `spade`, a Rust CDT; not evaluated here).
+
 ## Round 2: ruling weld-owner-defines-silhouette
 
 The operator answered round 1's question (ruling `weld-owner-defines-silhouette`, superseding

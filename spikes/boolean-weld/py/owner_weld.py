@@ -17,6 +17,29 @@ MIN_ANGLE = float(os.environ.get('MIN_ANGLE', '10'))
 SNAP = float(os.environ.get('SNAP', '0.25'))
 # SNAPDIR=reverse: the hull vertex slides onto the loop vertex instead (the loop stays on the cutter; spike variant)
 SNAPDIR = os.environ.get('SNAPDIR', 'loop-to-hull')
+# Round 3 (ruling weld-owner-local-corners-kept + Self's calls): no snapping where the cutter is planar (the seam stays on
+# the cutter's plane), and feature corners on the loop always survive: loop vertices on a sharp cutter edge (dihedral
+# > CORNER_DEG) or on a hull crease edge are never a merge source and never moved.
+NOSNAP_FLAT = os.environ.get('NOSNAP_FLAT', '0') == '1'
+CORNER_DEG = 30.0
+
+
+def sharp_cutter_edges(cut):
+    from geo import edge_faces, face_normals
+    FN, _ = face_normals(cut.V, cut.T); out = set()
+    for e, fs in edge_faces(cut.T).items():
+        if len(fs) == 2 and FN[fs[0]] @ FN[fs[1]] < np.cos(np.radians(CORNER_DEG)):
+            out.add(e)
+    return out
+
+
+def corners_of(P, info, hull, cut, tol):
+    sharp = sharp_cutter_edges(cut); out = []
+    for v, inf in info.items():
+        ce = cut.edge_of(P.V[v], tol)
+        if (ce is not None and (min(ce), max(ce)) in sharp) or inf['crease']:
+            out.append(P.V[v].copy())
+    return out
 
 
 class Piece:
@@ -91,7 +114,7 @@ class Piece:
         return s.V, np.array([s.faces[i] for i in keep]), np.array([s.prov[i] for i in keep])
 
 
-def candidates(P, info, loops, hull, tol, scope_ring=True):
+def candidates(P, info, loops, hull, tol, scope_ring=True, cut_is_flat=False):
     """Operations as (dist, v_pos, w_pos, kind): v merges into w."""
     cand = []; loopset = set(info)
     for L in loops:
@@ -116,7 +139,7 @@ def candidates(P, info, loops, hull, tol, scope_ring=True):
                 d = np.linalg.norm(P.V[x] - P.V[v])
                 if own == 1 and scope_ring:
                     cand.append((d, P.V[x].copy(), P.V[v].copy(), 'ring'))
-                elif own == 0 and inf['origin'] == 'H' and hull.kd.query(P.V[v])[0] > tol and hull.kd.query(P.V[x])[0] < tol:
+                elif own == 0 and not (NOSNAP_FLAT and cut_is_flat) and inf['origin'] == 'H' and hull.kd.query(P.V[v])[0] > tol and hull.kd.query(P.V[x])[0] < tol:
                     if d < SNAP * hull.vlen[hull.kd.query(P.V[x])[1]]:
                         if SNAPDIR == 'reverse':
                             cand.append((d, P.V[x].copy(), P.V[v].copy(), 'snap'))
@@ -129,10 +152,11 @@ def owner_weld(pieces, hull, cut, tol):
     """pieces: list of (V, T, prov); one for a cut-in, two for a split. Returns welded pieces, stats, done ops, info."""
     Ps = [Piece(*p) for p in pieces]
     infos = []
-    cand = []
+    cand = []; corners = []
     for P in Ps:
         loops, le, info = analyse_loops(P.V, np.array([f for f in P.faces]), np.array(P.prov), hull, cut, 'along', tol)
-        infos.append((loops, info)); cand += candidates(P, info, loops, hull, tol)
+        infos.append((loops, info)); cand += candidates(P, info, loops, hull, tol, cut_is_flat=cut.kind in ('box', 'obox'))
+        corners.extend(corners_of(P, info, hull, cut, tol))
     cand.sort(key=lambda z: z[0])
     stats = defaultdict(int); done = []; seen = set()
     for d, pv, pw, kind in cand:
@@ -140,6 +164,8 @@ def owner_weld(pieces, hull, cut, tol):
         if key in seen:
             continue
         seen.add(key); stats['cand_' + kind] += 1
+        if any(np.linalg.norm(pv - q) < tol for q in corners):
+            stats['protected_corner'] += 1; continue
         plan, reason = [], None
         for P in Ps:
             v = P.at(pv, tol); w = P.at(pw, tol)
@@ -165,4 +191,9 @@ def owner_weld(pieces, hull, cut, tol):
             else:
                 P.apply_move(v, w)
         stats['applied_' + kind] += 1; done.append((pv, pw))
-    return [P.result() for P in Ps], dict(stats), done, infos
+    res = [P.result() for P in Ps]
+    kept = 0
+    for q in corners:
+        kept += int(any(np.linalg.norm(Vr[np.unique(Tr)] - q, axis=1).min() < tol for Vr, Tr, _ in res))
+    stats['corners'] = len(corners); stats['corners_kept_in_place'] = kept
+    return res, dict(stats), done, infos

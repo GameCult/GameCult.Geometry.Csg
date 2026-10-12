@@ -22,7 +22,7 @@ for e in me.edges:
     w = att.data[e.index].value if att else 0.0
     if w > 0:
         segs.append((cage.matrix_world @ me.vertices[e.vertices[0]].co, cage.matrix_world @ me.vertices[e.vertices[1]].co, w))
-print('CAGE weighted edges', len(segs), 'smooth', [p.use_smooth for p in me.polygons][:1])
+print('CAGE clamp_overlap', bev_src.use_clamp_overlap, 'harden', bev_src.harden_normals, 'WN', wn_src.mode, wn_src.keep_sharp, 'weighted edges', len(segs), 'smooth', [p.use_smooth for p in me.polygons][:1])
 # Diagnostic: compare the cage's bevel-weight edges with the crease edges exported with the hull fixture.
 fx = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'fixtures')
 HV = [Vector(tuple(map(float, l.split()[1:4]))) for l in open(fx + '/hull_nobevel.obj') if l.startswith('v ')]
@@ -102,6 +102,7 @@ def build(stem, tubes):
     for k in ('width', 'segments', 'limit_method', 'offset_type', 'profile', 'harden_normals', 'miter_outer', 'miter_inner', 'clamp_overlap', 'loop_slide'):
         if hasattr(bev_src, k):
             setattr(b, k, getattr(bev_src, k))
+    b.use_clamp_overlap = bev_src.use_clamp_overlap if os.environ.get('CLAMP0') != '1' else False
     w = ob.modifiers.new('WeightedNormal', 'WEIGHTED_NORMAL')
     for k in ('mode', 'weight', 'thresh', 'keep_sharp', 'use_face_influence'):
         if hasattr(wn_src, k):
