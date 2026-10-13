@@ -66,9 +66,9 @@ def load(stem):
     return V, F, loop, VT, FT
 
 
-def bevel_uv(m, bev):
+def bevel_uv(m, bev, loop_segs):
     """Strip faces from bmesh.ops.bevel on the weighted edges (all weights are 1 here), with the modifier's settings.
-    Per strip: singular values of its 3D-to-UV map in units of the mesh's median hull density, and which charts its
+    Loop strips only (centre within 2.5 bevel widths of a loop edge). Per strip: singular values of its 3D-to-UV map in units of the mesh's median hull density, and which charts its
     corners lie in (hull UVs at u < 2.5, brush UVs at u >= 3)."""
     bm = bmesh.new(); bm.from_mesh(m)
     bw = bm.edges.layers.float.get('bevel_weight_edge'); uvl = bm.loops.layers.uv.active
@@ -99,8 +99,15 @@ def bevel_uv(m, bev):
     res = bmesh.ops.bevel(bm, geom=edges, offset=bev.width, offset_type=bev.offset_type, segments=bev.segments, profile=bev.profile,
                           affect='EDGES', clamp_overlap=bev.use_clamp_overlap, loop_slide=bev.loop_slide, miter_outer=bev.miter_outer.replace('MITER_', ''),
                           miter_inner=bev.miter_inner.replace('MITER_', ''), profile_type='SUPERELLIPSE')
+    # only the strips of loop edges (crease strips are the cage's own and not the weld's business)
+    lk = kdtree.KDTree(sum(max(2, int((a - b).length / 0.0004) + 1) for a, b in loop_segs)); n = 0
+    for a, b in loop_segs:
+        k = max(2, int((a - b).length / 0.0004) + 1)
+        for i in range(k): lk.insert(a.lerp(b, i / (k - 1)), n); n += 1
+    lk.balance()
     rows = []
     for f in [f for f in res['faces'] if f.is_valid]:
+        if lk.find(f.calc_center_median())[2] > 2.5 * bev.width: continue
         us = [l[uvl].uv.x for l in f.loops]; smin, smax = sig(f)
         rows.append((smin / rho, smax / rho, 'both' if min(us) < 2.5 <= max(us) else ('hull' if max(us) < 2.5 else 'brush')))
     bm.free()
@@ -155,7 +162,7 @@ def build(stem, tubes, uvgrid=False):
             setattr(w, k, getattr(wn_src, k))
     print('BUILT', stem, 'loop edges', nloop, 'hull weighted edges', nhull)
     if stem not in MEAS:
-        MEAS[stem] = bevel_uv(m, b); print('BEVELUV', stem, MEAS[stem])
+        MEAS[stem] = bevel_uv(m, b, [(Vector(V[a]), Vector(V[bb])) for a, bb, o in loop]); print('BEVELUV', stem, MEAS[stem])
     objs = [ob]
     if tubes:
         cu = bpy.data.curves.new(stem + '_own', 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = 0.0006

@@ -79,6 +79,25 @@ def uv_area(UV):
 
 HFN, HFA = face_normals(hull.V, hull.T)
 H_ISL = uv_islands(hull.T, HUV)
+# UV0 seams of the hull: edges whose two triangles give an endpoint different UVs. A loop vertex on one is protected like
+# a corner (never merged or moved), and a hull vertex on one never slides, so no weld step drags UVs across a seam.
+_uvat = defaultdict(set)
+for _fi, _t in enumerate(hull.T):
+    for _k in range(3): _uvat[(int(_t[_k]), _fi)] = tuple(np.round(HUV[_fi, _k], 7))
+UV_SEAM = set()
+for (_a, _b), _fs in edge_faces(hull.T).items():
+    if len(_fs) == 2 and (_uvat[(_a, _fs[0])] != _uvat[(_a, _fs[1])] or _uvat[(_b, _fs[0])] != _uvat[(_b, _fs[1])]): UV_SEAM.add((_a, _b))
+UV_SEAM_V = {v for e in UV_SEAM for v in e}
+PROTECT_UV_SEAMS = os.environ.get('PROTECT_UV_SEAMS', '1') == '1'
+
+
+def uv_seam_points(V, verts):
+    """Positions of the given vertices that lie on a hull UV0 seam edge (or are a seam vertex)."""
+    out = []
+    for v in verts:
+        he = hull.edge_of(V[v], TOL); hi = hull_index(V[v])
+        if (he is not None and he in UV_SEAM) or (hi is not None and hi in UV_SEAM_V): out.append(V[v].copy())
+    return out
 RHO = float(np.median(np.sqrt(np.abs(uv_area(HUV)) / np.maximum(HFA, 1e-300))))  # UV units per world unit
 
 
@@ -306,7 +325,7 @@ def hull_index(p):
     d, i = hull.kd.query(p); return int(i) if d < TOL else None
 
 
-def short_loop_merge(Ps):
+def short_loop_merge(Ps, protected=()):
     """Split only (round 3): consecutive seam vertices closer than the bevel width merge, both pieces jointly; only
     boolean-inserted seam vertices are merge sources. Round 4 guards it like the slide (compound(): local worst angle)."""
     L = boundary_loops(np.array([f for f in Ps[0].faces])); st = defaultdict(int); n = 0
@@ -317,6 +336,7 @@ def short_loop_merge(Ps):
             if not (Ps[0].alive[a] and Ps[0].alive[b]) or np.linalg.norm(pa - pb) >= BW: continue
             src, dst = (pb, pa) if hull_index(pb) is None else (pa, pb)
             if hull_index(src) is not None: st['refused_both_hull_vertices'] += 1; continue
+            if any(np.linalg.norm(src - q) < TOL for q in protected): st['protected'] += 1; continue
             trial = []
             for P in Ps:
                 v, w = P.at(src, TOL), P.at(dst, TOL)
@@ -379,7 +399,7 @@ def slide(Ps, corners, joint_absent=True):
             if he is not None and hull.kd.query(P0.V[v])[0] > TOL:
                 for h in he: cross[int(h)].append(v)
         for h, C in cross.items():
-            if h in hull.crease_v or any(np.linalg.norm(hull.V[h] - q) < TOL for q in corners): continue
+            if h in hull.crease_v or (PROTECT_UV_SEAMS and h in UV_SEAM_V) or any(np.linalg.norm(hull.V[h] - q) < TOL for q in corners): continue
             idx = sorted(pos[v] for v in C)
             # consecutive along the loop (allow wrap-around)
             span = None
@@ -484,11 +504,12 @@ for base in ('split_fwd', 'probe_crease'):
     for pk, (V, T, p) in pieces.items():
         finish(f'{base}_{pk}', 'naive', V, T, p, srcs, refl, plane)
     corners = [V0[v] for v in {v for L in L0 for v in L} if (lambda e: e is not None and e in hull.crease)(hull.edge_of(V0[v], TOL))]
+    seam_pts = uv_seam_points(V0, {v for L in L0 for v in L}) if PROTECT_UV_SEAMS else []
     capuv = {}
     for variant in ('r4-noslide', 'r4'):
         Ps = [OW.Piece(V, T[p == 0], np.zeros(int((p == 0).sum()), int)) for V, T, p in pieces.values()]
-        stm = short_loop_merge(Ps)
-        sls = slide(Ps, corners) if variant == 'r4' else {}
+        stm = short_loop_merge(Ps, corners + seam_pts)
+        sls = slide(Ps, corners + seam_pts) if variant == 'r4' else {}
         res = {}
         for pk, P in zip(pieces, Ps):
             V, T, _ = P.result(); L = boundary_loops(T)
@@ -566,12 +587,14 @@ for name in ('port_flank_s16', 'probe_switch_s48', 'probe_crease_cyl_s16', 'prob
     else:
         ref = densify(V, loops_of(T, p)[0], 64)
     finish(name, 'naive', V, T, p, srcs, ref)
-    welded, st, done, infos = OW.owner_weld([(V, T, p)], hull, cut, TOL)
+    seam_pts = (uv_seam_points(V, {v for L in loops_of(T, p)[0] for v in L}) + [hull.V[v].copy() for v in UV_SEAM_V]) if PROTECT_UV_SEAMS else []
+    welded, st, done, infos = OW.owner_weld([(V, T, p)], hull, cut, TOL, extra_protected=seam_pts)
     Vw, Tw, pw = welded[0]; info = infos[0][1]
     own = dict(hull=sum(1 for i in info.values() if i['owner'] == 0), brush=sum(1 for i in info.values() if i['owner'] == 1))
     finish(name, 'owner-r4', Vw, Tw, pw, srcs, ref, extra=dict(weld=st, owners=own), info=info)
     corners = OW.corners_of(OW.Piece(Vw, Tw, pw), {v: i for v, i in info.items()}, hull, cut, TOL)
-    PL = [OW.Piece(Vw, Tw, pw)]; sls = slide(PL, corners, joint_absent=False); Vs, Ts, ps = PL[0].result()
+    corners_all = corners + seam_pts
+    PL = [OW.Piece(Vw, Tw, pw)]; sls = slide(PL, corners_all, joint_absent=False); Vs, Ts, ps = PL[0].result()
     L, le = loops_of(Ts, ps); lset = {(min(a, b), max(a, b)) for a, b in le}
     T1, nf = flip_hull_all(Vs, Ts, ps, lset, band_of(Vs, Ts, L))
     _, _, srcf, _ = assign_uv(Vs, T1, ps, srcs)

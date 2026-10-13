@@ -7,6 +7,247 @@ Agent `spike-bt-boolean-weld`, 2026-10-12. A spike, not a cut: the code under `s
 Her words, the spec of the rule: "the surface with the tighter curve defines the silhouette of the cut, and the spare
 vertices that come from the flatter surface all get merged away."
 
+## Round 4: Self's calls (a) to (f) under target r4
+
+Agent `hands-bt-weld-spike-r4`, session `self-2026-10-13-ag`, 2026-10-13. Target r4 (`brush-tree:target:r4`, doc
+@ 40faab6) is in force; rulings `weld-owner-local-corners-kept`, `brush-modes-add-subtract-split`,
+`weld-runs-as-live-result-object`, `blender-evaluates-cages`, `paint-after-commit`; follow-up
+`aetheria-release:follow_up:weld-result-uv0-ownership`.
+
+How it was run (all on Starfire, Windows; one job at a time):
+
+- **Input:** Blender 5.2.2's evaluated mesh without the Bevel, as before (`fixtures/hull_nobevel.obj`). For UVs,
+  `py/export_uv.py` gives the hand cage a stand-in UV0 (Smart UV Project on the cage, 66 deg, mirrored half offset
+  by 1 in U; she has no unwrap yet: the cage's `UVMap` layer was there but unused) and exports the evaluated mesh with
+  per-corner UVs (`fixtures/hull_uv.obj`). Its positions equal the fixture's to 2e-7 (the OBJ's 7 decimals): 3,010
+  vertices, 3,008 quads, 11 UV islands. Nothing was saved to any .blend.
+- **Kernel:** boolmesh 0.2.1 through the spike driver, now with `add` (union).
+- **CDT:** the driver's new `cdt` subcommand over **spade 2.15.1**. Its crate metadata reads
+  `license = "MIT OR Apache-2.0"` (`Cargo.toml` of the downloaded crate; `cargo info spade` agrees). Settings:
+  angle limit 20 deg, `keep_constraint_edges()` (no constraint edge is split), `exclude_outer_faces(true)`. The driver
+  asserts that spade keeps the input vertices in order and unmoved. 177 calls, all `refinement_complete`, 1,051
+  Steiner points. Triangle is gone from the spike: `py/round3.py` is deleted and `py/round4.py` replaces it.
+- **Weld:** `py/round4.py` with guard floor 5 deg; `py/owner_weld.py` without the `snap` kind (b).
+- **Finishing and renders:** `py/render_blender.py` headless, the cage's own Bevel and Weighted Normal settings
+  (0.001, one segment, clamp overlap on), Workbench. Loop edges and hull crease edges carry bevel weight 1; brush
+  edges carry none in these renders (see the add-mode note).
+- **Tables:** `spikes/boolean-weld/results/round4/` (`table4.md`, `measures4.json`, `bevel_uv.json`).
+
+### (a) Slide onto the seam: flat split before and after
+
+Look at these first: same pipeline (short seam merge, flips, spade cap CDT), without and with the slide.
+
+![flat split, before and after the slide](spike-boolean-weld/r4_split_r4.jpg)
+![flat split wide, before and after](spike-boolean-weld/r4_splitwide_r4.jpg)
+![flat split wire, before and after](spike-boolean-weld/r4_splitwire_r4.jpg)
+![crease box, before and after](spike-boolean-weld/r4_crease_r4.jpg)
+
+What the slide does, as built:
+
+- A hull vertex H, never a crease vertex, a corner or a UV0 seam vertex, whose own edges cross the seam at
+  consecutive seam vertices C(H), slides inside its own surface to the nearest point M of the seam between them,
+  if that is closer than the bevel width. C(H) merge into it, so the seam passes through H's new position.
+- M lies on the intersection, so the seam stays on the plane (off-plane 0 in every row). In the other piece of the
+  split (where H is absent) the first C(H) vertex moves to M and the rest merge into it. The two seams stay identical
+  (crack 0.0).
+- Every operation is judged on its end state over both pieces: no touched face inverts, and the worst angle over
+  the touched faces (deleted ones included) does not end below 5 deg if it got worse. Round 3's per-step guard
+  refused all 7 candidates on the split, because the first step (moving H) flattens a face that the merges then
+  delete. The short seam merge now uses the same guard.
+- Round 3's diagnosis was half wrong. The split's 0.68 deg needle is two boolean-inserted seam vertices 0.00034
+  apart (crossings of two edges of one hull vertex), not a hull vertex on a seam vertex. That hull vertex lies on the
+  removed side, in the other piece. The short merge (round 3's call, now with the end-state guard) or the slide
+  removes it.
+
+| flat split | variant | hull slivers | hull worst deg | hull p5 | cap slivers | cap worst | seam-adjacent edges < bevel width | shortest seam-adjacent edge | crack |
+|---|---|---|---|---|---|---|---|---|---|
+| panel split, subtract piece | naive | 37 | 0.68 | 3.9 | 60 | 0.058 | 15 | 0.00026 | 0 |
+| | before (no slide) | 23 | 1.37 | 5.7 | 6 | 7.6 | 6 | 0.00030 | 0 |
+| | after (slide) | 19 | 1.37 | 6.8 | 8 | 6.8 | 4 | 0.00030 | 0 |
+| panel split, intersect piece | before | 16 | 2.51 | 6.7 | 6 | 7.6 | 5 | 0.00079 | 0 |
+| | after | 18 | 2.51 | 5.6 | 8 | 6.8 | 5 | 0.00079 | 0 |
+| crease box, subtract piece | naive | 22 | 0.38 | 3.7 | 22 | 0.033 | 12 | 1.5e-5 | 0 |
+| | before | 12 | 2.36 | 6.8 | 0 | 6.9 | 6 | 1.3e-4 | 0 |
+| | after | 9 | 2.51 | 7.3 | 0 | 7.4 | 1 | 9.9e-4 | 0 |
+| crease box, intersect piece | before | 10 | 1.40 | 7.1 | 0 | 6.9 | 5 | 1.5e-4 | 0 |
+| | after | 7 | 2.08 | 7.3 | 0 | 7.4 | 0 | 1.0e-3 | 0 |
+
+- **Moves:** split 4 slides (10 seam vertices merged), crease box 3 (6 merged). The largest move is 0.00087 on the
+  split and 0.00084 on the crease box, below the 0.001 bevel width. Each moved vertex stays on its own hull edges.
+- **Without UV0 seam protection** the split took 5 slides and the subtract piece reached worst 2.1 deg, 2
+  short edges. The extra slide sat on a UV0 seam and tore the UVs (stretch 820x), so the protected run is the one
+  reported. Geometry and UV seams compete at that one spot.
+- **Render:** the slide removes the dark smear at the lower end of the seam. A light wedge remains in the middle.
+  It sits where seam-adjacent edges stay under the bevel width and the overlap clamp narrows the groove.
+- **Her reading to confirm:** the moved vertices are the hull's own (the owner's) on a flat split. They keep their
+  identity and leave their position by under the bevel width. Her words were "so they survive". The pair above is
+  for her eye.
+
+### (b) No snapping on any stretch
+
+`owner_weld.py` no longer has the `snap` kind or its knobs. Along-loop merges (`loop`) and, where the cutter
+owns, `ring` merges remain.
+
+| case | variant | hull slivers | hull worst | silhouette dev max % | corners kept |
+|---|---|---|---|---|---|
+| ownership switch r 0.08 | round 3 (snap on hull stretches) | 53 | 1.2e-6 | 0.323 | 4 / 4 |
+| | owner-r4 (no snap) | 44 | 1.2e-6 | 0.0196 | 4 / 4 |
+| | r4 (+ slide, flips, facet CDT) | 23 | 0.144 | 0.0196 | 4 / 4 |
+| gun port 16 | owner-r4 | 5 | 5.09 | 0.0198 | |
+| | r4 | 4 | 5.40 | 0.0198 | |
+
+- The switch probe's loop no longer moves on hull-owned stretches: 0.32 % to 0.0196 %. The 0.0196 % is the
+  cutter-owned `loop` merges, as in round 1.
+- The switch keeps a needle on the owner side (0.14 deg after flips). The port is unchanged.
+
+![port](spike-boolean-weld/r4_port_r4.jpg)
+![switch](spike-boolean-weld/r4_switch_r4.jpg)
+
+### (c) spade replaces Triangle
+
+- spade caps match or beat round 3's Triangle caps:
+  - split: cap worst 0.058 to 6.8 to 7.6 deg (round 3, Triangle: 5.5), cap slivers 4 to 8;
+  - crease box: cap slivers 0, cap worst 6.9 to 7.4 deg (round 3: 3 slivers, 0.71 deg).
+- No seam vertex was moved or split (driver assertion; seam off-plane 0; crack 0).
+- Licence: MIT OR Apache-2.0, quoted above. It satisfies `no-unownable-tools-in-loop`.
+
+### (d) Planar brush facets re-triangulated
+
+Each planar brush facet the hull trimmed (one holding a loop edge) is re-triangulated in its own plane by spade.
+Its boundary edges (loop and brush edges) are constraints, with interior Steiner points only. No boundary edge
+was lost in any case (`constraint_edges_missing` 0), so loop and brush edge weights survive.
+
+| case | variant | brush slivers | brush worst | brush p5 | seam-adjacent edges < bw |
+|---|---|---|---|---|---|
+| box across ridge | naive | 48 | 0.070 | 0.41 | 4 |
+| | r4 (facet CDT, Steiner inside only) | 48 | 0.19 | 0.47 | 3 |
+| | r4 + split brush edges (variant) | 5 | 4.91 | 18.1 | 5 |
+| box in flank | naive / r4 / split variant | 1 / 0 / 0 | 0.29 / 6.9 / 13.7 | | 0 |
+| add box | naive / r4 / split variant | 4 / 1 / 0 | 3.0 / 5.0 / 17.8 | | 0 |
+| switch (cylinder walls) | owner-r4 / r4 / split variant | 11 / 16 / 36 | 0.06 / 0.30 / 0.30 | | 16 / 22 / 28 |
+
+- **As called, (d) does not fix the ridge box.** Its 48 slivers are fans from a dense trimmed loop edge to the two
+  ends of one long brush edge. Under `keep_constraint_edges` no Steiner point may land on that edge, so spade added
+  only 3 points.
+- **The variant** puts evenly spaced collinear points on long brush edges (never loop edges), shared by both facets
+  on that edge. It removes them: 48 to 5 slivers, worst 4.9 deg. The edge stays where it is and both halves keep its
+  weight. The neighbouring untrimmed facet is re-triangulated too.
+- **On the curved cutters' planar wall quads it makes things worse** (switch 11 to 16 to 36 slivers), and more
+  seam-adjacent edges fall under the bevel width. Those quads are narrow strips, and the sliver test flags any
+  triangulation of them.
+
+![box across ridge: naive, r4, split brush edges](spike-boolean-weld/r4_boxridge_r4.jpg)
+![box across ridge, wire](spike-boolean-weld/r4_boxridgewire_r4.jpg)
+![box in flank](spike-boolean-weld/r4_boxflank_r4.jpg)
+
+### (e) Add mode
+
+Cases: an oriented box raised panel (half-width 0.025, 0.02 proud) at the flank box's placement, and a 16-segment
+cylinder boss (r 0.015, 0.02 proud) at the gun port.
+
+| case | variant | hull slivers | hull worst | brush slivers | brush worst | seam-adjacent edges < bw | corners kept |
+|---|---|---|---|---|---|---|---|
+| add box | naive | 10 | 0.44 | 4 | 3.0 | 0 | |
+| | owner-r4 | 10 | 0.44 | 2 | 3.0 | 0 | 4 / 4 |
+| | r4 | 4 | 2.37 | 1 | 5.0 | 0 | 4 / 4 |
+| add cylinder | naive | 19 | 0.11 | 16 | 0.15 | 6 | |
+| | owner-r4 | 4 | 3.92 | 0 | 7.6 | 0 | |
+| | r4 | 4 | 5.47 | 0 | 7.8 | 0 | |
+
+- **The same rule holds on the union loop.** The hull owns every stretch of the box (28 hull-owned loop vertices,
+  its 4 corners protected) and the cylinder owns its loop (38 / 38), exactly as for subtract.
+- **The concave loop's bevel:** 25 strips on the box loop and 28 on the cylinder loop, none collapsed, no edge
+  under the bevel width, so the clamp does not narrow it.
+- **The render's box walls are smooth-shaded into the floor**, a dark gradient. The brush's own edges carry no
+  weight in this render, and Weighted Normal smooths across the 90 deg box edges. Production gives brush edges
+  their row weight (`bevel-weights-carry`). This is a render-setup gap, not a weld result.
+
+![add box: naive, r4, loop owners](spike-boolean-weld/r4_addbox_r4.jpg)
+![add cylinder](spike-boolean-weld/r4_addcyl_r4.jpg)
+
+### (f) UV0 carry-through
+
+The operator asked: "Isn't every face present in either mesh operand?"
+
+- **Yes, out of the boolean.** Every one of every naive result's faces (4,404 to 6,238 per mesh, 11 meshes) is a
+  fragment of one operand face: a hull quad or a planar brush facet. Each takes its UVs exactly by barycentric
+  interpolation in that face. boolmesh carries only one per-corner scalar, so the spike rebuilds UVs from face
+  provenance plus position. Manifold would carry UVs as properties.
+- **After the weld, some faces are no longer single-face fragments.** Merges, slides and flips join corners from
+  two neighbouring operand faces: 5 to 88 hull faces per mesh (`not_fragments_hull`). Each corner still lies on the
+  hull surface and takes its UV from the operand face it lies on.
+  - With UV0 seams protected, their stretch stays within 0.25x to 3.9x of the hull's density on the panel split, box
+    cut-ins and adds. The crease box's intersect piece has one face nearly collapsed in UV (sigma_min 3e-5). Before protection the split reached 820x.
+  - The switch (88x) and the crease notch (109x) still show it: cutter-owned `loop` and `ring` merges there pull a
+    corner across a UV seam that no protected vertex marks.
+- **Hull UV0 islands:** unchanged in count on the gun port, box cut-ins, adds and the switch (11 of 11). Hull-side UV
+  flips are 0 everywhere except the crease box's intersect piece (1).
+  - The crease box's pieces gain islands: 11 source islands appear as 14 and 4 in place of 11 and 3. Some welded
+    faces there no longer share UVs with their neighbours along an edge.
+  - Not solved: the protection covers seam crossings and seam vertices, not every corner that a merge pulls into
+    another island's face.
+- **Brush-side UV flips** (58 to 433) are subtract and split caps whose faces are reversed relative to the operand
+  face. Their UVs are mirrored relative to the face. A brush chart for a cut wall needs a mirrored placement or a
+  flip at assignment.
+- **Split caps:** both pieces' caps are fragments of the same cutter face, so carried UVs coincide exactly (max
+  difference 1e-15) and the two caps overlap in UV0. `uv-bar` wants unique UV0, so one cap's chart must be placed
+  apart. That is a placement rule, and the follow-up's question.
+- **Bevel strips** (`bmesh.ops.bevel`, the modifier's own BM bevel, with its settings, on a copy; loop strips only):
+  - Every strip on every mesh takes the hull side's UVs (spans: hull 100 %, including hull-to-cap strips on
+    splits). That holds wherever this spike looked, though BMesh documents no rule for which side a strip takes.
+  - Stretch, relative to the hull's density: the narrow direction is compressed (sigma_min median 0.46 to 0.81;
+    p5 0.22 to 0.67). The long direction is near 1 (sigma_max median 0.95 to 1.22; p95 1.05 to 2.9).
+  - Outliers: 19.8 on the split's intersect piece, 96 to 156 on the crease box, at strips beside the welded faces
+    above. No strip collapsed except 1 on the crease box.
+  - So strips need no UV placement of their own. They inherit a slightly compressed copy of the hull chart, which a
+    livery mask sampling UV0 will show as the hull's paint running into the groove.
+  - The one measure that failed: the switch's owner-r4 mesh returned zero density (`collapsed` 80 of 80). It is a
+    measuring fault on that mesh; its r4 row is normal.
+
+![UV grid across the split seam](spike-boolean-weld/r4_splituv_r4.jpg)
+![UV grid on the adds](spike-boolean-weld/r4_adduv_r4.jpg)
+
+### Did each call hold
+
+- (a) Built and measured. The split's needle goes (0.68 to 1.37 deg; edges under the bevel width 15 to 4) and
+  the crease box's short edges go (12 to 1 and 0). It is not uniform yet: one slide is refused to keep UV0 whole, and
+  the light wedge remains. Her eye decides the reading.
+- (b) Held. The loop no longer moves on hull stretches.
+- (c) Held. spade (MIT OR Apache-2.0) replaces Triangle and does as well or better.
+- (d) Held as specified but does not fix the ridge box. It needs brush edges split collinearly (variant measured:
+  48 to 5 slivers).
+- (e) Held. The rule and corners work on the union loop, and its concave bevel is clean.
+- (f) Answered yes for the boolean. The weld must not move UVs across UV0 seams: partly solved here.
+
+### Open questions for Self (round 4), with a recommendation each
+
+1. **Brush edges split for the CDT.** May the facet CDT put collinear points on a brush edge (never a loop or crease
+   edge), shared by both facets, each half keeping the weight? Recommendation: yes for planar brush facets only,
+   with a minimum spacing near the loop's. It is the only measured fix for the ridge box, and it moves no surface. Do
+   not apply it to curved-cutter wall quads; it worsened them.
+2. **UV0 seams as protected features.** Should a loop vertex on a UV0 seam, and a hull UV0 seam vertex, be
+   protected like corners for every weld step (merges, slide, flips)? Recommendation: yes, and extend it to
+   cutter-owned `loop` and `ring` merges, which still tear UVs on the switch and the notch. Her unwrap is authored
+   state, and the weld must not cut through it. This costs one slide on the split.
+3. **Split caps and reversed cut walls in UV0.** Recommendation: give each brush a UV chart (`brushes-own-surfaces`)
+   and place the intersect piece's cap as a mirrored copy in its own tile. Then a carried cap UV is never shared, and
+   a cut wall's mirrored winding is fixed at placement, not by the weld. That answers the follow-up's "who owns UV0"
+   for created faces: the brush's chart. The hull's UV0 rides through by interpolation, so no unwrap after the weld
+   is needed.
+4. **The guard.** Round 4 judges compound operations by their end state, with a local worst-angle rule (never
+   ending below 5 deg if it got worse). A per-step guard refuses operations whose intermediate state is degenerate.
+   Recommendation: adopt the end-state guard in the weld's spec. It is target r4's own wording, "drops the band's
+   worst angle below the floor".
+5. **Her reading of "so they survive".** The split pair at the top of this section shows owner (hull) vertices
+   moved by under the bevel width. Recommendation: ask her with that image. If she says no, the slide applies only to
+   the yielding side, and the short merge alone takes the needle (the before image).
+
+What remains unmeasured:
+
+- Manifold's property carry (UVs through the kernel).
+- A real unwrap of hers in place of the stand-in.
+- The light wedge's exact clamp edges on the split.
+
 ## Round 3: Self's calls and ruling weld-owner-local-corners-kept
 
 Inputs to this round:

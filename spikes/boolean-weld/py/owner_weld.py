@@ -136,8 +136,9 @@ def candidates(P, info, loops, hull, tol, scope_ring=True):
     return cand
 
 
-def owner_weld(pieces, hull, cut, tol):
-    """pieces: list of (V, T, prov); one for a cut-in, two for a split. Returns welded pieces, stats, done ops, info."""
+def owner_weld(pieces, hull, cut, tol, extra_protected=()):
+    """pieces: list of (V, T, prov); one for a cut-in, two for a split. extra_protected: more positions that are never a
+    merge source (round 4: loop vertices on a UV0 seam). Returns welded pieces, stats, done ops, info."""
     Ps = [Piece(*p) for p in pieces]
     infos = []
     cand = []; corners = []
@@ -145,14 +146,14 @@ def owner_weld(pieces, hull, cut, tol):
         loops, le, info = analyse_loops(P.V, np.array([f for f in P.faces]), np.array(P.prov), hull, cut, 'along', tol)
         infos.append((loops, info)); cand += candidates(P, info, loops, hull, tol)
         corners.extend(corners_of(P, info, hull, cut, tol))
-    cand.sort(key=lambda z: z[0])
+    cand.sort(key=lambda z: z[0]); protected = corners + list(extra_protected)
     stats = defaultdict(int); done = []; seen = set()
     for d, pv, pw, kind in cand:
         key = (tuple(np.round(pv, 9)), tuple(np.round(pw, 9)))
         if key in seen:
             continue
         seen.add(key); stats['cand_' + kind] += 1
-        if any(np.linalg.norm(pv - q) < tol for q in corners):
+        if any(np.linalg.norm(pv - q) < tol for q in protected):
             stats['protected_corner'] += 1; continue
         plan, reason = [], None
         for P in Ps:
