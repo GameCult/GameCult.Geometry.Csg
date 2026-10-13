@@ -1,26 +1,20 @@
-"""Round 2 weld: ruling weld-owner-defines-silhouette. The surface whose own vertices shape the loop owns it
-(measured as curvature along the loop); its vertices survive, the other surface's spare vertices near the loop
-merge onto them:
+"""Owner weld: rulings weld-owner-local-corners-kept and brush-modes-add-subtract-split, target r4. Ownership is local
+along the loop (curvature along the loop); the owner's vertices survive and the other surface's spare vertices near
+that stretch merge onto them:
   - 'loop': a loop vertex made only by the yielding side's edges merges into the nearest owner-made loop vertex.
   - 'ring' (cutter owns): a hull vertex one ring off the loop merges onto that loop vertex.
-  - 'snap' (hull owns): a loop vertex the boolean inserted on a hull edge, within SNAP local edge lengths of an
-    existing hull vertex, merges INTO that hull vertex (the hull vertex survives where it is).
+Round 4 cut the 'snap' kind (loop vertex merged into a nearby hull vertex on hull-owned stretches) and its knobs
+(SNAP, SNAPDIR, NOSNAP_FLAT): target r4's weld-path-fixed forbids snapping the loop on any stretch. Rounds 2 and 3 ran
+with it; that code is at db2c162.
 A split is welded jointly: every operation is checked on both pieces and applied only if both accept, so the two
-pieces' loops stay identical. In the piece that lacks the surviving hull vertex, the loop vertex moves to it.
-Guards (both pieces): no face flip, worst angle not driven below MIN_ANGLE, edge exists, link condition."""
+pieces' loops stay identical. Guards (both pieces): no face flip, worst angle not driven below MIN_ANGLE, edge exists,
+link condition. Corners (sharp cutter edge or hull crease on the loop) are never a merge source and never moved."""
 import os, numpy as np
 from collections import defaultdict
 from scipy.spatial import cKDTree
 from weld import analyse_loops, loops_of, angles
 
 MIN_ANGLE = float(os.environ.get('MIN_ANGLE', '10'))
-SNAP = float(os.environ.get('SNAP', '0.25'))
-# SNAPDIR=reverse: the hull vertex slides onto the loop vertex instead (the loop stays on the cutter; spike variant)
-SNAPDIR = os.environ.get('SNAPDIR', 'loop-to-hull')
-# Round 3 (ruling weld-owner-local-corners-kept + Self's calls): no snapping where the cutter is planar (the seam stays on
-# the cutter's plane), and feature corners on the loop always survive: loop vertices on a sharp cutter edge (dihedral
-# > CORNER_DEG) or on a hull crease edge are never a merge source and never moved.
-NOSNAP_FLAT = os.environ.get('NOSNAP_FLAT', '0') == '1'
 CORNER_DEG = 30.0
 
 
@@ -114,7 +108,7 @@ class Piece:
         return s.V, np.array([s.faces[i] for i in keep]), np.array([s.prov[i] for i in keep])
 
 
-def candidates(P, info, loops, hull, tol, scope_ring=True, cut_is_flat=False):
+def candidates(P, info, loops, hull, tol, scope_ring=True):
     """Operations as (dist, v_pos, w_pos, kind): v merges into w."""
     cand = []; loopset = set(info)
     for L in loops:
@@ -139,12 +133,6 @@ def candidates(P, info, loops, hull, tol, scope_ring=True, cut_is_flat=False):
                 d = np.linalg.norm(P.V[x] - P.V[v])
                 if own == 1 and scope_ring:
                     cand.append((d, P.V[x].copy(), P.V[v].copy(), 'ring'))
-                elif own == 0 and not (NOSNAP_FLAT and cut_is_flat) and inf['origin'] == 'H' and hull.kd.query(P.V[v])[0] > tol and hull.kd.query(P.V[x])[0] < tol:
-                    if d < SNAP * hull.vlen[hull.kd.query(P.V[x])[1]]:
-                        if SNAPDIR == 'reverse':
-                            cand.append((d, P.V[x].copy(), P.V[v].copy(), 'snap'))
-                        else:
-                            cand.append((d, P.V[v].copy(), P.V[x].copy(), 'snap'))
     return cand
 
 
@@ -155,7 +143,7 @@ def owner_weld(pieces, hull, cut, tol):
     cand = []; corners = []
     for P in Ps:
         loops, le, info = analyse_loops(P.V, np.array([f for f in P.faces]), np.array(P.prov), hull, cut, 'along', tol)
-        infos.append((loops, info)); cand += candidates(P, info, loops, hull, tol, cut_is_flat=cut.kind in ('box', 'obox'))
+        infos.append((loops, info)); cand += candidates(P, info, loops, hull, tol)
         corners.extend(corners_of(P, info, hull, cut, tol))
     cand.sort(key=lambda z: z[0])
     stats = defaultdict(int); done = []; seen = set()
@@ -172,7 +160,7 @@ def owner_weld(pieces, hull, cut, tol):
             if v is None:
                 if w is None:
                     continue
-                if kind == 'loop' or (kind == 'snap' and SNAPDIR != 'reverse'):
+                if kind == 'loop':
                     reason = 'gone'; break  # the loop vertex is already gone in this piece
                 continue
             if w is not None:

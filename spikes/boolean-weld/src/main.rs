@@ -1,6 +1,8 @@
 //! Boolean driver for the boolean-weld spike. Reads two closed OBJ meshes (hull, cutter), runs one
 //! boolean in one kernel, writes the result OBJ and a per-triangle provenance file (0 = hull face,
-//! 1 = cutter face). Usage: spike-boolean-weld <boolmesh|manifold> <sub|int> <hull.obj> <cutter.obj> <out-prefix>
+//! 1 = cutter face). Usage: spike-boolean-weld <boolmesh|manifold> <sub|int|add> <hull.obj> <cutter.obj> <out-prefix>
+//! Round 4: `spike-boolean-weld cdt <in.txt> <out.txt>` runs spade's constrained Delaunay triangulation with
+//! refinement (interior Steiner points only, constraint edges never split) on one planar polygon set.
 use std::{fs, time::Instant};
 
 fn load_obj(p: &str) -> (Vec<f64>, Vec<usize>) {
@@ -34,7 +36,7 @@ fn run_boolmesh(op: &str, a: &(Vec<f64>, Vec<usize>), b: &(Vec<f64>, Vec<usize>)
     let vb = vec![1.0f64; b.1.len()];
     let ma = Manifold::new_with_values(&a.0, &a.1, &va).expect("hull not manifold for boolmesh");
     let mb = Manifold::new_with_values(&b.0, &b.1, &vb).expect("cutter not manifold for boolmesh");
-    let op = if op == "sub" { OpType::Subtract } else { OpType::Intersect };
+    let op = match op { "sub" => OpType::Subtract, "add" => OpType::Add, _ => OpType::Intersect };
     let r = compute_boolean(&ma, &mb, op).expect("boolmesh failed");
     let v: Vec<f64> = r.ps.iter().flat_map(|p| [p.x as f64, p.y as f64, p.z as f64]).collect();
     let t: Vec<usize> = r.hs.iter().map(|h| h.tail).collect();
@@ -51,7 +53,7 @@ fn run_manifold(op: &str, a: &(Vec<f64>, Vec<usize>), b: &(Vec<f64>, Vec<usize>)
     };
     let (ha, hb) = (mk(a), mk(b));
     let hull_id = ha.original_id() as u32;
-    let r = if op == "sub" { ha.difference(&hb) } else { ha.intersection(&hb) };
+    let r = match op { "sub" => ha.difference(&hb), "add" => ha.union(&hb), _ => ha.intersection(&hb) };
     let g = r.to_meshgl64();
     let v = g.vert_properties();
     let np = g.num_prop();
@@ -65,8 +67,48 @@ fn run_manifold(op: &str, a: &(Vec<f64>, Vec<usize>), b: &(Vec<f64>, Vec<usize>)
     (v, t, prov)
 }
 
+/// Input: `n m angle_deg max_add`, then n lines `x y`, then m lines `a b` (constraint edges, 0-based).
+/// Output: `V k` then k lines `x y` (the n inputs first, in order, then the Steiner points), `T j` then j lines
+/// `a b c` (inner faces only, counter-clockwise), and a last line `R complete=<bool> added=<k-n>`.
+fn run_cdt(inp: &str, out: &str) {
+    use spade::{AngleLimit, ConstrainedDelaunayTriangulation, Point2, RefinementParameters, Triangulation};
+    let s = fs::read_to_string(inp).expect("read cdt input");
+    let mut it = s.split_whitespace();
+    let mut nx = || it.next().expect("short cdt input");
+    let (n, m): (usize, usize) = (nx().parse().unwrap(), nx().parse().unwrap());
+    let (ang, max_add): (f64, usize) = (nx().parse().unwrap(), nx().parse().unwrap());
+    let pts: Vec<Point2<f64>> = (0..n).map(|_| Point2::new(nx().parse().unwrap(), nx().parse().unwrap())).collect();
+    let edges: Vec<[usize; 2]> = (0..m).map(|_| [nx().parse().unwrap(), nx().parse().unwrap()]).collect();
+    let mut cdt = ConstrainedDelaunayTriangulation::<Point2<f64>>::bulk_load_cdt(pts.clone(), edges).expect("cdt bulk load");
+    assert_eq!(cdt.num_vertices(), n, "spade merged duplicate input points");
+    for (i, v) in cdt.fixed_vertices().enumerate().take(n) {
+        let p = cdt.vertex(v).position();
+        assert!(v.index() == i && p.x == pts[i].x && p.y == pts[i].y, "spade reordered input vertices");
+    }
+    let params = RefinementParameters::<f64>::new()
+        .with_angle_limit(AngleLimit::from_deg(ang))
+        .keep_constraint_edges()
+        .exclude_outer_faces(true)
+        .with_max_additional_vertices(max_add);
+    let r = cdt.refine(params);
+    let excluded: std::collections::HashSet<_> = r.excluded_faces.iter().copied().collect();
+    let mut o = format!("V {}
+", cdt.num_vertices());
+    for v in cdt.vertices() { let p = v.position(); o += &format!("{:.17e} {:.17e}
+", p.x, p.y); }
+    let faces: Vec<_> = cdt.inner_faces().filter(|f| !excluded.contains(&f.fix())).collect();
+    o += &format!("T {}
+", faces.len());
+    for f in faces { let [a, b, c] = f.vertices().map(|v| v.fix().index()); o += &format!("{a} {b} {c}
+"); }
+    o += &format!("R complete={} added={}
+", r.refinement_complete, cdt.num_vertices() - n);
+    fs::write(out, o).unwrap();
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    if a[1] == "cdt" { return run_cdt(&a[2], &a[3]); }
     let (kernel, op, hull, cutter, out) = (&a[1], &a[2], &a[3], &a[4], &a[5]);
     let (h, c) = (load_obj(hull), load_obj(cutter));
     let t0 = Instant::now();
